@@ -88,7 +88,7 @@ def sync_menu(source='', dest=''):
     dest = options.get('dest', dest)
     print('Opening sync menu')
     print.buffer, _buffer = getattr(sync_menu, 'buffer', ''), print.buffer # save a backup
-    boxes = ('Missing', 'Different', 'Extra', 'Same', 'Clear', 'CRC')
+    boxes = ('Missing', 'Different', 'Same', 'Extra', 'Clear', 'CRC')
     checked = dict(Missing=True)
     scanned = False
     tooltips = dict(
@@ -130,11 +130,11 @@ def sync_menu(source='', dest=''):
             results = load_data(source, dest)
             time.sleep(1)
             if results:
-                files, artists, folders, skipped = results
+                files, artists, folders, extra = results
                 print.window = None
                 options['source'] = source
                 options['dest'] = dest
-                results = check_files(files, skipped, source, dest, opts)
+                results = check_files(files, extra, source, dest, opts)
                 window['Copy'].update(disabled=False)
                 window['CONSOLE'].update(print.buffer)
                 window.Refresh()
@@ -148,10 +148,8 @@ def sync_menu(source='', dest=''):
             return
 
         elif event in boxes and scanned:
-            print(f'check changed to {opts}')
             print.window = None
-            results = check_files(files, skipped, source, dest, opts)
-            print(opts)
+            results = check_files(files, extra, source, dest, opts)
             window['Copy'].update(disabled=False)
             window['CONSOLE'].update(print.buffer)
             window.Refresh()
@@ -266,19 +264,19 @@ def load_data(source, dest):
             return
 
     ti = time.perf_counter()
-    files, skipped, folders = get_files(source)
+    files, extra, folders = get_files(source)
     artists = get_artists(files, source)
     ti = (time.perf_counter() - ti) * 1000
-    print(f'found {len(files)} MP3s, {len(skipped)} other files in {ti:0.2f}ms')
+    print(f'found {len(files)} MP3s, {len(extra)} other files in {ti:0.2f}ms')
 
-    return files, artists, folders, skipped
+    return files, artists, folders, extra
 
 def get_files(path, extensions=('.mp3',), subfolders=True):
     'Create image list from given path and file extensions'
     depth = len(path[1:].split(os.sep))
     trim = len(path) if path.endswith(os.sep) else len(path) + 1
     files = []
-    skipped = []
+    extra = []
     folders = []
 
     print(f'Scanning files in {path}')
@@ -294,7 +292,7 @@ def get_files(path, extensions=('.mp3',), subfolders=True):
                     files.append(os.path.join(dirpath, filename)[trim:])
                     in_folder += 1
                 else:
-                    skipped.append(os.path.join(dirpath, filename)[trim:])
+                    extra.append(os.path.join(dirpath, filename)[trim:])
             for dirname in dirnames:
                 folders.append(os.path.join(dirpath, dirname)[trim:])
             if in_folder:
@@ -305,31 +303,36 @@ def get_files(path, extensions=('.mp3',), subfolders=True):
                 files.append(os.path.join(path, f))
                 total += 1
 
-    return files, skipped, folders
+    return files, extra, folders
 
 def check_files(files, extra, sdir, ddir, opts):
     missing = []
     older = []
     differ = []
-    skipped = []
+    same = []
+    nextra = []
     displayed = 0
     ti = time.perf_counter()
 
     if opts['Extra']:
-        files = files + extra
+        if not (opts['Missing'] or opts['Different'] or opts['Same']):
+            files = extra
+        else:
+            files = files + extra
 
-    files.sort(key=lambda s: s.lower()); skipped.sort(key=lambda s: s.lower())
+    files.sort(key=lambda s: s.lower())
     print(f'Comparing {len(files)} files')
     for file in files:
+        _print(sdir, file)
         source = os.path.join(sdir, file)
         dest = os.path.join(ddir, file)
 
-        if not os.path.isfile(dest):
+        if opts['Extra'] and files == extra:
+            nextra.append((source, dest))
+            print(f"{file} extra"); displayed += 1
+        elif not os.path.isfile(dest):
             if opts['Missing']:
                 print(f"{file} missing"); displayed += 1
-            elif opts['Extra'] and file in extra:
-                print(f"{file} missing (non-MP3)"); displayed += 1
-
             missing.append((source, dest))
         elif os.path.getsize(dest) != os.path.getsize(source):
             if opts['Different']:
@@ -342,12 +345,12 @@ def check_files(files, extra, sdir, ddir, opts):
                 print(f"dest '{file}' older"); displayed += 1
             older.append((source, dest))
         else:
-            if all:
+            if opts['Same']:
                 print(f"dest '{dest}' skipped")
-            skipped.append((source, dest))
+            same.append((source, dest))
     ti = (time.perf_counter() - ti) * 1000
     print(f'Compared {len(files)} files in {ti:.2f}ms, displayed {displayed}')
-    return missing, older, differ, extra
+    return missing, older, differ, same, nextra
 
 def make_folders(dest, folders):
     for folder in folders:
@@ -356,15 +359,17 @@ def make_folders(dest, folders):
             os.mkdir(f)
 
 def pick_files(results, opts):
-    missing, older, differ, skipped = results
+    missing, older, differ, same, extra = results
     which = []
     if opts['Missing']:
         which += missing
     if opts['Different']:
         which += older
         which += differ
+    if opts['Same']:
+        which += same
     if opts['Extra']:
-        which += skipped
+        which += extra
     return which
 
 def copy_files(files, source, dest, opts):
