@@ -31,9 +31,8 @@ def main():
     while True:
         event, values = window.read()
         print.window = window
-        print(f'{event}: {values}')
 
-        if event == sg.WIN_CLOSED or event == 'Cancel': # if user closes window or clicks cancel
+        if event == sg.WIN_CLOSED or event == 'Cancel':
             break
         elif event == 'Clear':
             print.buffer = ''
@@ -41,6 +40,8 @@ def main():
             window = theme_menu(window)
         elif event == "Sync to Dest":
             sync_menu()
+        else:
+            print(f'{event}: {values}')
 
         window["CONSOLE"].update(print.buffer)
 
@@ -55,7 +56,8 @@ def main_window(theme='DarkBlack1', size=16):
     opt2 = tools[6:]
 
     theme = options.get('theme', theme)
-    sg.set_options(font=options['font'])
+    font = options.get('font', ('Arial', size))
+    sg.set_options(font=font, tooltip_font=font)
     sg.theme(theme)
     layout = [[sg.Button(opt, tooltip=tooltips[opt]) for opt in opt1],
               [sg.Button(opt, tooltip=tooltips[opt]) for opt in opt2],
@@ -87,7 +89,7 @@ def theme_menu(parent):
                 options['theme'] = theme
             window.close()
             parent.close()
-            return main_window(theme)
+            return main_window()
               
         elif event in (sg.WIN_CLOSED, 'Cancel'):
             print('Canceled theme change')
@@ -121,7 +123,8 @@ def sync_menu(source='', dest=''):
                     default=checked.get(box, False)) for box in boxes],
             [sg.Multiline(enable_events=False, size=(100, 15),
                     key="CONSOLE", write_only=True, disabled=True, autoscroll=True)],
-            [sg.Push(), sg.Button('Cancel'), sg.Button('Scan'), sg.Button('Copy', disabled=True)] ]
+            [sg.Button('Clip Filenames', disabled=True), sg.Push(), sg.Button('Cancel'), 
+                    sg.Button('Scan'), sg.Button('Copy', disabled=True)] ]
     
     window = sg.Window('Sync Files', layout, modal=True, finalize=True)
     window['CONSOLE'].update(print.buffer)
@@ -140,6 +143,7 @@ def sync_menu(source='', dest=''):
             scanned = False
             print.buffer = ''
             window['Copy'].update(disabled=True)
+            window['Clip Filenames'].update(disabled=True)
             results = load_data(source, dest)
             time.sleep(1)
             if results:
@@ -148,10 +152,12 @@ def sync_menu(source='', dest=''):
                 options['source'] = source
                 options['dest'] = dest
                 results = check_files(files, extra, source, dest, opts)
-                window['Copy'].update(disabled=False)
+                if results:
+                    window['Copy'].update(disabled=False)
+                    window['Clip Filenames'].update(disabled=False)
+                    scanned = True
                 window['CONSOLE'].update(print.buffer)
                 window.Refresh()
-                scanned = True
         elif event == 'Copy':
             files = pick_files(results, opts)
             r = sg.popup_ok_cancel(f'Copy {len(files)} files to {dest}?', title='Copy')
@@ -165,8 +171,8 @@ def sync_menu(source='', dest=''):
 
         elif event in boxes and scanned:
             print.window = None
+            print.buffer = ''
             results = check_files(files, extra, source, dest, opts)
-            window['Copy'].update(disabled=False)
             window['CONSOLE'].update(print.buffer)
             window.Refresh()
 
@@ -239,6 +245,23 @@ def save_options(options, path=None):
     else:
         print('Options unchanged: not saving')
 
+def time_str(ti):
+    ti = (time.perf_counter() - ti) * 1000
+    if ti < 1000:
+        return f'{ti:.0f} ms'
+    elif ti < 1000 * 60 * 2:
+        return f'{ti/1000:.2f} s'
+    else:
+        return f'{ti/(1000*60):.1f} min'
+
+def get_CRC(fpath):
+    """With for loop and buffer."""
+    crc = 0
+    with open(fpath, 'rb', 65536) as ins:
+        for x in range(int((os.stat(fpath).st_size / 65536)) + 1):
+            crc = zlib.crc32(ins.read(65536), crc)
+    return '%08X' % (crc & 0xFFFFFFFF)
+
 
 ## M P 3  F U N C T I O N S
 def get_artists(files, path):
@@ -266,8 +289,7 @@ def load_data(source, dest):
     ti = time.perf_counter()
     files, extra, folders = get_files(source)
     artists = get_artists(files, source)
-    ti = (time.perf_counter() - ti) * 1000
-    print(f'found {len(files)} MP3s, {len(extra)} other files in {ti:0.2f}ms')
+    print(f'found {len(files)} MP3s, {len(extra)} other files in {time_str(ti)}')
 
     return files, artists, folders, extra
 
@@ -345,11 +367,13 @@ def check_files(files, extra, sdir, ddir, opts):
                 print(f"dest '{file}' older"); displayed += 1
             older.append((source, dest))
         else:
-            if opts['Same']:
-                print(f"dest '{dest}' skipped")
+            if opts['Same']: 
+                print(f"dest '{dest}' skipped"); displayed += 1
             same.append((source, dest))
-    ti = (time.perf_counter() - ti) * 1000
-    print(f'Compared {len(files)} files in {ti:.2f}ms, displayed {displayed}')
+    print(f'Compared {len(files)} files in {time_str(ti)}, displayed {displayed}')
+
+    if not displayed:
+        return False
     return missing, older, differ, same, nextra
 
 def make_folders(dest, folders):
@@ -376,8 +400,9 @@ def copy_files(files, source, dest, opts):
     total = len(files)
     clear = opts['Clear']
     max_length = 80
-    trim = max_length - len('Copying ')
+    trim = max_length - len('Copying   ')
     src_trim = len(source) + 1
+    ti = time.perf_counter()
 
     print(f'Copying {len(files)} files')
     for i, file in enumerate(files):
@@ -385,8 +410,8 @@ def copy_files(files, source, dest, opts):
         src = _source[src_trim:]
         if not sg.one_line_progress_meter('Copying Files', i+1, total, 
                 f'Syncing Files from {source} to {dest}', f'Copying {src[-trim:]}',
-                orientation='h', no_titlebar=True, size = (max_length, 3), grab_anywhere=False,
-                bar_color=('white', 'red')):
+                orientation='h', no_titlebar=False, size = (max_length, 3), grab_anywhere=False,
+                bar_color=('white', 'red'), keep_on_top=False):
             print(f'Canceled sync at file {source}')
             break
 
@@ -399,11 +424,11 @@ def copy_files(files, source, dest, opts):
             tags.save()
             _source = tmp
         copy(_source, _dest)
-        print(_source)
+        #print(_source)
         if clear:
             os.remove(tmp)
         time.sleep(.2)
-    print(f'Finished copying {len(files)} files')
+    print(f'Finished copying {len(files)} files in {time_str(ti)}')
 
 
 if __name__ == '__main__':
