@@ -8,6 +8,18 @@ from shutil import copy
 tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Show Artists',
         'Show Albums', 'Show non-MP3s', 'Make Artist Playlist', 'Make Album Playlists',
         'Fix Playlist', 'Change Theme')
+tooltips = {
+    'Sync to Dest': 'Sync MP3s from source to dest folder',
+    'Remove Extras': 'Remove non-MP3 files from source folder',
+    'Verify Filenames': 'Check for and fix mangled filenames',
+    'Show Artists': 'Show all artists in source folder (for fixing misspellings etc)',
+    'Show Albums': 'Show all albums with song counts in source folder',
+    'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
+    'Artist Playlists': 'Make playlists for artists with x songs or more',
+    'Album Playlists': 'Make playlists for albums with x songs or more',
+    'Fix Playlist': 'Normalize playlist for root folder and remove extra lines',
+    'Change Theme': 'Change GUI colors and font size' }
+tools = list(tooltips.keys())
 themes = sg.theme_list()
 
 
@@ -45,8 +57,8 @@ def main_window(theme='DarkBlack1', size=16):
     theme = options.get('theme', theme)
     sg.set_options(font=options['font'])
     sg.theme(theme)
-    layout = [[sg.Button(opt) for opt in opt1],
-              [sg.Button(opt) for opt in opt2],
+    layout = [[sg.Button(opt, tooltip=tooltips[opt]) for opt in opt1],
+              [sg.Button(opt, tooltip=tooltips[opt]) for opt in opt2],
               [sg.Multiline(default_text=print.buffer, enable_events=False, size=(120, 20),
                     key="CONSOLE", write_only=True, disabled=True, autoscroll=True)],
               [sg.Push(), sg.Button('Clear'), sg.Button('Copy'), sg.Button('Save')] ]
@@ -126,6 +138,7 @@ def sync_menu(source='', dest=''):
             break
         elif event == 'Scan':
             scanned = False
+            print.buffer = ''
             window['Copy'].update(disabled=True)
             results = load_data(source, dest)
             time.sleep(1)
@@ -141,6 +154,9 @@ def sync_menu(source='', dest=''):
                 scanned = True
         elif event == 'Copy':
             files = pick_files(results, opts)
+            r = sg.popup_ok_cancel(f'Copy {len(files)} files to {dest}?', title='Copy')
+            if r == 'Cancel':
+                continue
             make_folders(dest, folders)
             sync_menu.buffer, print.buffer = print.buffer, _buffer
             window.close()
@@ -157,22 +173,6 @@ def sync_menu(source='', dest=''):
 
     sync_menu.buffer, print.buffer = print.buffer, _buffer 
     print.window = None
-
-def old_copy_files(files):
-    files, *_ = mp3.get_files(source, )
-    total = len(files)
-    max_length = 80
-    trim = max_length - len('Copying ')
-
-    # Display a progress meter. Allow user to break out of loop using cancel button
-    for i, fn in enumerate(files):
-        if not sg.one_line_progress_meter('Copying Files', i+1, total, 
-                f'Syncing Files from {source} to {dest}', f'Copying {fn[-trim:]}',
-                orientation='h', no_titlebar=True, size = (max_length, 3), grab_anywhere=False,
-                bar_color=('white', 'red')):
-            print(f'Canceled sync at file {fn}')
-            break
-        time.sleep(.02)
 
 
 ## U T I L I T Y  F U N C T I O N S
@@ -403,6 +403,7 @@ def copy_files(files, source, dest, opts):
         if clear:
             os.remove(tmp)
         time.sleep(.2)
+    print(f'Finished copying {len(files)} files')
 
 
 if __name__ == '__main__':
