@@ -1,4 +1,10 @@
 #!bin/python
+'''
+TODO:
+update initial folder in sync window when text changes
+
+'''
+
 import os, sys, pickle, time, pyperclip, zlib
 import PySimpleGUI as sg
 from mutagen.easyid3 import EasyID3 as ID3
@@ -10,7 +16,7 @@ tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Show Artists',
         'Fix Playlist', 'Change Theme')
 tooltips = {
     'Sync to Dest': 'Sync MP3s from source to dest folder',
-    'Remove Extras': 'Remove non-MP3 files from source folder',
+    'Clean Dest': 'Remove files from dest missing in source folder',
     'Verify Filenames': 'Check for and fix mangled filenames',
     'Show Artists': 'Show all artists in source folder (for fixing misspellings etc)',
     'Show Albums': 'Show all albums with song counts in source folder',
@@ -41,6 +47,8 @@ def main():
             window = theme_menu(window)
         elif event == "Sync to Dest":
             sync_menu()
+        elif event == 'Clean Dest':
+            clean_menu(window)
         elif event == 'Copy':
             pyperclip.copy(print.buffer)
         else:
@@ -83,7 +91,7 @@ def theme_menu(parent):
 
     if theme in themes:
         i = themes.index(theme)
-        window['LIST'].update(set_to_index=[i], scroll_to_index=i)
+        window['LIST'].update(set_to_index=[i], scroll_to_index=max(i-3, 0))
     while True:
         event, values = window.read()
         if event == 'Change':
@@ -191,15 +199,99 @@ def sync_menu(source='', dest=''):
                 window['Copy'].update(disabled=True)
                 window['Clip Filenames'].update(disabled=True)
 
-
-
     sync_menu.buffer, print.buffer = print.buffer, _buffer 
     print.window = None
 
+def clean_menu(source='', dest=''):
+    def update(source, dest, opts):
+        extras = find_unexpected(source, dest, opts)
+        window['LIST'].update(values=extras or ['Nothing found'])
+        if extras:
+            window['Clip Filenames'].update(disabled=False)
+            window['Remove'].update(disabled=False)
+        else:
+            window['Clip Filenames'].update(disabled=True)
+            window['Remove'].update(disabled=True)
+        window['SBUT'].InitialFolder=source
+        window['DBUT'].InitialFolder=dest
+        options['source'] = source
+        options['dest'] = dest
+        return extras
+
+    source = options.get('source', source)
+    dest = options.get('dest', dest)
+    print('Opening clean menu')
+    boxes = ('MP3s', 'Other')
+    checked = dict(MP3s=True, Other=False)
+    tooltips = dict(
+        MP3s='Remove extra MP3s from dest folder',
+        Other='Remove other extra files from dest folder',
+        Remove='Delete shown files from dest folder',
+        Swap='Swap source and dest folders')
+
+    layout = [[sg.Text('Source', size=10),
+                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.FolderBrowse(initial_folder=source, key="SBUT"),
+                sg.Push(), sg.Button('Swap', tooltip=tooltips['Swap'])],
+            [sg.Text('Dest', size=10),
+                sg.In(dest, size=(50,1), enable_events=True ,key='DEST'),
+                sg.FolderBrowse(initial_folder=dest, key='DBUT')],
+            [sg.Checkbox(box, key=box, tooltip=tooltips[box], enable_events=True,
+                    default=checked.get(box, False)) for box in boxes],
+            [sg.Listbox(['Scanning'], size=(100, 15),
+                    key="LIST")],
+            [sg.Button('Clip Filenames', disabled=True), sg.Push(), sg.Button('Cancel'), 
+                    sg.Button('Remove', tooltip=tooltips['Remove'], disabled=True)] ]
+    
+    window = sg.Window('Clean Dest Folder', layout, modal=True, finalize=True)
+
+    extras =  update(source, dest, checked)
+    while True:
+        event, values = window.read()
+        values = values or {}
+        opts = {k:values.get(k, False) for k in boxes}
+
+        if event in ('Cancel', sg.WIN_CLOSED):
+            window.close()
+            break
+        elif event == 'Remove':
+            r = sg.popup_ok_cancel(f'Delete {len(extras)} files from {dest}?', title='Delete')
+            if r == 'OK':
+                for f in extras:
+                    os.remove(os.path.join(dest, f))
+                print(f'Deleted {len(extras)} files from {dest}')
+                window.close()
+                break
+        elif event == 'Clip Filenames' and extras:
+            s = ''
+            for f in extras:
+                s += os.path.join(dest, f) + '\n'
+            pyperclip.copy(s)
+        elif event == 'Swap':
+            source, dest = dest, source
+            window['SOURCE'].update(source)
+            window['DEST'].update(dest)
+            extras = update(source, dest, opts)
+        elif event in boxes:
+            extras = update(source, dest, opts)
+        elif event == 'SOURCE':
+            nsource = values['SOURCE']
+            if comp_dir(source, nsource, True):
+                source = nsource
+                extras = update(source, dest, opts)
+        elif event == 'DEST':
+            ndest = values['DEST']
+            if comp_dir(dest, ndest, True):
+                dest = ndest
+                extras = update(source, dest, opts)
+        else:
+            print(f'{event} {values}')
 
 ## U T I L I T Y  F U N C T I O N S
 _print = print
 def print(line):
+    if print.quiet:
+        return
     line = str(line)
     _print(line)
     print.buffer += line+'\n'
@@ -211,6 +303,7 @@ def print(line):
             pass
 print.buffer = '' 
 print.window = None
+print.quiet = False
 
 def load_options(path=None):
     global options
@@ -266,71 +359,15 @@ def get_CRC(fpath):
             crc = zlib.crc32(ins.read(65536), crc)
     return '%08X' % (crc & 0xFFFFFFFF)
 
+def comp_dir(d1, d2, check_exist=False):
+    d1 = os.path.normpath(d1)
+    d2 = os.path.normpath(d2)
+    r = d1 == d2
+    exists = os.path.isdir(d1) and os.path.isdir(d2)
+    #print(f'1: {d1}, 2: {d2}, equal: {r}, exists: {exists}')
+    return exists and not r
 
 ## M P 3  F U N C T I O N S
-def get_artists(files, path):
-    artists = {}
-    for f in files:
-        tags = ID3(os.path.join(path, f))
-        artist = tags.get('Artist', [None,])[0]
-        album = tags.get('Album', [artist,])[0]
-        l = artists.get(artist, [])
-        l.append((f, album))
-        artists[artist] = l
-    return artists
-
-def load_data(source, dest):
-    if not os.path.isdir(source):
-        print(f'{source} is not a folder')
-        return
-    if not os.path.isdir(dest):
-        try:
-            os.mkdir(dest)
-        except:
-            print(f'{dest} is not a folder')
-            return
-
-    ti = time.perf_counter()
-    files, extra, folders = get_files(source)
-    artists = get_artists(files, source)
-    print(f'found {len(files)} MP3s, {len(extra)} other files in {time_str(ti)}')
-
-    return files, artists, folders, extra
-
-def get_files(path, extensions=('.mp3',), subfolders=True):
-    'Create image list from given path and file extensions'
-    depth = len(path[1:].split(os.sep))
-    trim = len(path) if path.endswith(os.sep) else len(path) + 1
-    files = []
-    extra = []
-    folders = []
-
-    print(f'Scanning files in {path}')
-    total = 0
-    if subfolders:
-        for (dirpath, dirnames, filenames) in os.walk(path):
-            sp = dirpath[1:].split(os.sep)
-            dots = '.'*(len(sp) - depth)
-            in_folder = 0
-            for filename in filenames:
-                total += 1
-                if os.path.splitext(filename)[-1].lower() in extensions:
-                    files.append(os.path.join(dirpath, filename)[trim:])
-                    in_folder += 1
-                else:
-                    extra.append(os.path.join(dirpath, filename)[trim:])
-            for dirname in dirnames:
-                folders.append(os.path.join(dirpath, dirname)[trim:])
-            if in_folder:
-                print(f'  {dots}{sp[-1]}: {in_folder} MP3s')
-    else:
-        for f in os.listdir(path):
-            if os.path.splitext(f)[-1].lower() in extensions:
-                files.append(os.path.join(path, f))
-                total += 1
-
-    return files, extra, folders
-
 def check_files(files, extra, sdir, ddir, opts):
     missing = []
     older = []
@@ -380,26 +417,6 @@ def check_files(files, extra, sdir, ddir, opts):
     if not displayed:
         return False
     return missing, older, differ, same, nextra
-
-def make_folders(dest, folders):
-    for folder in folders:
-        f = os.path.join(dest, folder)
-        if not os.path.exists(f):
-            os.mkdir(f)
-
-def pick_files(results, opts):
-    missing, older, differ, same, extra = results
-    which = []
-    if opts['Missing']:
-        which += missing
-    if opts['Different']:
-        which += older
-        which += differ
-    if opts['Same']:
-        which += same
-    if opts['Extra']:
-        which += extra
-    return which
 
 def clip_files(results, opts):
     missing, older, differ, same, extra = results
@@ -457,6 +474,108 @@ def copy_files(files, source, dest, opts):
         time.sleep(.2)
     print(f'Finished copying {len(files)} files in {time_str(ti)}')
 
+def find_unexpected(source, dest, opts):
+    sfiles, sextra, *_ = get_files(source, quiet=True)
+    dfiles, dextra, *_ = get_files(dest, quiet=True)
+    extra = []
+
+    if not opts.get('MP3s', False):
+        sfiles = []
+        dfiles = []
+
+    if opts.get('Other', False):
+        sfiles = sorted(sfiles + sextra, key=lambda x: x.lower())
+        dfiles = sorted(dfiles + dextra, key=lambda x: x.lower())
+
+    for file in dfiles:
+        if file not in sfiles:
+            extra.append(file)
+    return extra
+
+def get_artists(files, path):
+    artists = {}
+    for f in files:
+        tags = ID3(os.path.join(path, f))
+        artist = tags.get('Artist', [None,])[0]
+        album = tags.get('Album', [artist,])[0]
+        l = artists.get(artist, [])
+        l.append((f, album))
+        artists[artist] = l
+    return artists
+
+def get_files(path, extensions=('.mp3',), subfolders=True, quiet=False):
+    'Create image list from given path and file extensions'
+    depth = len(path[1:].split(os.sep))
+    trim = len(path) if path.endswith(os.sep) else len(path) + 1
+    files = []
+    extra = []
+    folders = []
+    print.quiet = quiet
+
+    print(f'Scanning files in {path}')
+    total = 0
+    if subfolders:
+        for (dirpath, dirnames, filenames) in os.walk(path):
+            sp = dirpath[1:].split(os.sep)
+            dots = '.'*(len(sp) - depth)
+            in_folder = 0
+            for filename in filenames:
+                total += 1
+                if os.path.splitext(filename)[-1].lower() in extensions:
+                    files.append(os.path.join(dirpath, filename)[trim:])
+                    in_folder += 1
+                else:
+                    extra.append(os.path.join(dirpath, filename)[trim:])
+            for dirname in dirnames:
+                folders.append(os.path.join(dirpath, dirname)[trim:])
+            if in_folder:
+                print(f'  {dots}{sp[-1]}: {in_folder} MP3s')
+    else:
+        for f in os.listdir(path):
+            if os.path.splitext(f)[-1].lower() in extensions:
+                files.append(os.path.join(path, f))
+                total += 1
+
+    print.quiet = False
+    return files, extra, folders
+
+def load_data(source, dest):
+    if not os.path.isdir(source):
+        print(f'{source} is not a folder')
+        return
+    if not os.path.isdir(dest):
+        try:
+            os.mkdir(dest)
+        except:
+            print(f'{dest} is not a folder')
+            return
+
+    ti = time.perf_counter()
+    files, extra, folders = get_files(source)
+    artists = get_artists(files, source)
+    print(f'found {len(files)} MP3s, {len(extra)} other files in {time_str(ti)}')
+
+    return files, artists, folders, extra
+
+def make_folders(dest, folders):
+    for folder in folders:
+        f = os.path.join(dest, folder)
+        if not os.path.exists(f):
+            os.mkdir(f)
+
+def pick_files(results, opts):
+    missing, older, differ, same, extra = results
+    which = []
+    if opts['Missing']:
+        which += missing
+    if opts['Different']:
+        which += older
+        which += differ
+    if opts['Same']:
+        which += same
+    if opts['Extra']:
+        which += extra
+    return which
 
 if __name__ == '__main__':
     main()
