@@ -1,5 +1,5 @@
 #!bin/python
-import os, sys, pickle, time
+import os, sys, pickle, time, pyperclip, zlib
 import PySimpleGUI as sg
 from mutagen.easyid3 import EasyID3 as ID3
 from shutil import copy
@@ -21,6 +21,7 @@ tooltips = {
     'Change Theme': 'Change GUI colors and font size' }
 tools = list(tooltips.keys())
 themes = sg.theme_list()
+temp_dir = '/tmp'
 
 
 def main():
@@ -40,6 +41,8 @@ def main():
             window = theme_menu(window)
         elif event == "Sync to Dest":
             sync_menu()
+        elif event == 'Copy':
+            pyperclip.copy(print.buffer)
         else:
             print(f'{event}: {values}')
 
@@ -68,13 +71,19 @@ def main_window(theme='DarkBlack1', size=16):
 
 def theme_menu(parent):
     font, size = options['font']
+    theme = options['theme']
     layout = [[sg.Listbox(values=themes, size=(30,10), key='LIST')],
              [sg.Text('Size:'), sg.Slider(default_value=size, range=(6,24),
                     key='size', orientation='h')],
              [sg.Push(), sg.Button('Cancel'), sg.Button('Change')]]
  
     print('Changing theme')    
-    window = sg.Window("Theme Chooser", layout, modal=True, font=options['font'])
+    window = sg.Window("Theme Chooser", layout, modal=True,
+            font=options['font'], finalize=True)
+
+    if theme in themes:
+        i = themes.index(theme)
+        window['LIST'].update(set_to_index=[i], scroll_to_index=i)
     while True:
         event, values = window.read()
         if event == 'Change':
@@ -98,6 +107,20 @@ def theme_menu(parent):
     return parent
 
 def sync_menu(source='', dest=''):
+    def update(results):
+        files, artists, folders, extra = results
+        print.window = None
+        options['source'] = source
+        options['dest'] = dest
+        results = check_files(files, extra, source, dest, opts)
+        if results:
+            window['Copy'].update(disabled=False)
+            window['Clip Filenames'].update(disabled=False)
+            scanned = True
+        window['CONSOLE'].update(print.buffer)
+        window.Refresh()
+        return results
+
     source = options.get('source', source)
     dest = options.get('dest', dest)
     print('Opening sync menu')
@@ -128,6 +151,7 @@ def sync_menu(source='', dest=''):
     
     window = sg.Window('Sync Files', layout, modal=True, finalize=True)
     window['CONSOLE'].update(print.buffer)
+    results = False
     while True:
         print.window = window
         event, values = window.read()
@@ -140,26 +164,16 @@ def sync_menu(source='', dest=''):
             window.close()
             break
         elif event == 'Scan':
-            scanned = False
             print.buffer = ''
             window['Copy'].update(disabled=True)
             window['Clip Filenames'].update(disabled=True)
             results = load_data(source, dest)
             time.sleep(1)
             if results:
-                files, artists, folders, extra = results
-                print.window = None
-                options['source'] = source
-                options['dest'] = dest
-                results = check_files(files, extra, source, dest, opts)
-                if results:
-                    window['Copy'].update(disabled=False)
-                    window['Clip Filenames'].update(disabled=False)
-                    scanned = True
-                window['CONSOLE'].update(print.buffer)
-                window.Refresh()
+                final_results = update(results)
         elif event == 'Copy':
-            files = pick_files(results, opts)
+            files, artists, folders, extra = results
+            files = pick_files(final_results, opts)
             r = sg.popup_ok_cancel(f'Copy {len(files)} files to {dest}?', title='Copy')
             if r == 'Cancel':
                 continue
@@ -168,13 +182,15 @@ def sync_menu(source='', dest=''):
             window.close()
             copy_files(files, source, dest, opts)
             return
-
-        elif event in boxes and scanned:
-            print.window = None
+        elif event == 'Clip Filenames':
+            clip_files(final_results, opts)
+        elif event in boxes and results:
             print.buffer = ''
-            results = check_files(files, extra, source, dest, opts)
-            window['CONSOLE'].update(print.buffer)
-            window.Refresh()
+            final_results = update(results)
+            if not final_results:
+                window['Copy'].update(disabled=True)
+                window['Clip Filenames'].update(disabled=True)
+
 
 
     sync_menu.buffer, print.buffer = print.buffer, _buffer 
@@ -195,22 +211,6 @@ def print(line):
             pass
 print.buffer = '' 
 print.window = None
-
-'''
-class Printer():
-    buffers = {}
-    controls
-    
-    def __call__():
-        
-    def set(name, control):
-        Printer.buffer = Printer.buffers.get(name, '')
-        Printer.buffers[name] = Printer.buffer
-        Printer.control = control
-    def clear()
-    def previous()
-    def refresh()
-'''
 
 def load_options(path=None):
     global options
@@ -253,6 +253,10 @@ def time_str(ti):
         return f'{ti/1000:.2f} s'
     else:
         return f'{ti/(1000*60):.1f} min'
+
+def check_CRC(f1, f2):
+    if get_CRC(f1) == get_CRC(f2):
+        return True
 
 def get_CRC(fpath):
     """With for loop and buffer."""
@@ -345,30 +349,31 @@ def check_files(files, extra, sdir, ddir, opts):
     files.sort(key=lambda s: s.lower())
     print(f'Comparing {len(files)} files')
     for file in files:
-        _print(sdir, file)
         source = os.path.join(sdir, file)
         dest = os.path.join(ddir, file)
 
         if opts['Extra'] and files == extra:
             nextra.append((source, dest))
-            print(f"{file} extra"); displayed += 1
+            print(f'{file} (extra)'); displayed += 1
         elif not os.path.isfile(dest):
             if opts['Missing']:
-                print(f"{file} missing"); displayed += 1
+                print(f'{file} (missing)'); displayed += 1
             missing.append((source, dest))
         elif os.path.getsize(dest) != os.path.getsize(source):
             if opts['Different']:
-                print(f"dest '{file}' differs"); displayed += 1
+                print(f'{file} (differs)'); displayed += 1
             differ.append((source, dest))
-        elif opts['CRC'] and check_crc(source, dest):
-            pass
+        elif opts['CRC'] and not check_CRC(source, dest):
+            if opts['Different']:
+                print(f'{file} (CRC differs)'); displayed += 1
+            differ.append((source, dest))
         elif os.path.getmtime(dest) < os.path.getmtime(source):
-            if opts['Older']:
-                print(f"dest '{file}' older"); displayed += 1
+            if opts['Different']:
+                print(f'{file} (older)'); displayed += 1
             older.append((source, dest))
         else:
             if opts['Same']: 
-                print(f"dest '{dest}' skipped"); displayed += 1
+                print(f'{file} (same)'); displayed += 1
             same.append((source, dest))
     print(f'Compared {len(files)} files in {time_str(ti)}, displayed {displayed}')
 
@@ -396,6 +401,28 @@ def pick_files(results, opts):
         which += extra
     return which
 
+def clip_files(results, opts):
+    missing, older, differ, same, extra = results
+    outp = ''
+    if opts['Missing']:
+        outp += 'Missing Files\n'
+        for l in missing:
+            outp += l[0] + '\n'
+    if opts['Different']:
+        more = sorted(older+differ, key=lambda x: x.lower())
+        outp += '\nDifferent Files\n'
+        for l in differ:
+            outp += l[0] + '\n'
+    if opts['Same']:
+        outp += '\nSame Files\n'
+        for l in same:
+            outp += l[0] + '\n'
+    if opts['Extra']:
+        outp += '\nnon-MP3 Files\n'
+        for l in extra:
+            outp += l[0] + '\n'
+    pyperclip.copy(outp)
+
 def copy_files(files, source, dest, opts):
     total = len(files)
     clear = opts['Clear']
@@ -412,8 +439,8 @@ def copy_files(files, source, dest, opts):
                 f'Syncing Files from {source} to {dest}', f'Copying {src[-trim:]}',
                 orientation='h', no_titlebar=False, size = (max_length, 3), grab_anywhere=False,
                 bar_color=('white', 'red'), keep_on_top=False):
-            print(f'Canceled sync at file {source}')
-            break
+            print(f'Canceled sync after {time_str(ti)} at file {_source}')
+            return
 
         if clear:
             tmp = os.path.join(temp_dir, os.path.split(_dest)[1])
