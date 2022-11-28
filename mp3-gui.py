@@ -49,6 +49,8 @@ def main():
             sync_menu()
         elif event == 'Clean Dest':
             clean_menu(window)
+        elif event == 'Verify Filenames':
+            verify_menu(window)
         elif event == 'Copy':
             pyperclip.copy(print.buffer)
         else:
@@ -239,7 +241,7 @@ def clean_menu(source='', dest=''):
             [sg.Checkbox(box, key=box, tooltip=tooltips[box], enable_events=True,
                     default=checked.get(box, False)) for box in boxes],
             [sg.Listbox(['Scanning'], size=(100, 15),
-                    key="LIST")],
+                    key="LIST", enable_events=True)],
             [sg.Button('Clip Filenames', disabled=True), sg.Push(), sg.Button('Cancel'), 
                     sg.Button('Remove', tooltip=tooltips['Remove'], disabled=True)] ]
     
@@ -284,8 +286,63 @@ def clean_menu(source='', dest=''):
             if comp_dir(dest, ndest, True):
                 dest = ndest
                 extras = update(source, dest, opts)
+        elif event == 'LIST':
+            item = values[event][0]
+            if item in extras:
+                i = extras.index(item)
+                extras.remove(item)
+                window['LIST'].update(values=extras or ['Nothing found'],
+                        scroll_to_index=max(i-2, 0))
+            print(f'{event}: {values[event]}')
         else:
             print(f'{event} {values}')
+
+
+def verify_menu(window):
+    source = options['source']
+    print('Opening filename menu')
+    boxes = ('MP3s', 'Other')
+
+
+    files = get_files(source, quiet=True)[0]
+    items = check_filenames(files)
+    layout = [[sg.Text('Source', size=10),
+                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.FolderBrowse(initial_folder=source, key="SBUT")],
+            [sg.Listbox(items, size=(100, 15),
+                    key="LIST")],
+            [sg.Push(), sg.Button('Copy'), sg.Button('Close')] ]
+    
+    window = sg.Window('Verify Filenames ', layout, modal=True, finalize=True)
+
+    while True:
+        event, values = window.read()
+
+        if event in ('Close', sg.WIN_CLOSED):
+            window.close()
+            break
+        elif event == 'Copy':
+            pyperclip.copy('\n'.join(items))
+        elif event == 'Clip Filenames' and extras:
+            s = ''
+            for f in extras:
+                s += os.path.join(dest, f) + '\n'
+            pyperclip.copy(s)
+        elif event == 'Swap':
+            source, dest = dest, source
+            window['SOURCE'].update(source)
+            window['DEST'].update(dest)
+            extras = update(source, dest, opts)
+        elif event in boxes:
+            extras = update(source, dest, opts)
+        elif event == 'SOURCE':
+            nsource = values['SOURCE']
+            if comp_dir(source, nsource, True):
+                source = nsource
+                files = get_files(source, quiet=True)[0]
+                items = check_filenames(files)
+                window['LIST'].update(values=items)
+
 
 ## U T I L I T Y  F U N C T I O N S
 _print = print
@@ -368,6 +425,24 @@ def comp_dir(d1, d2, check_exist=False):
     return exists and not r
 
 ## M P 3  F U N C T I O N S
+def check_filenames(files, dashes=False):
+    items = []
+    for file in files:
+        f = os.path.split(file)[1]
+        msg = ''
+        if f.count('-') < 1:
+            msg += 'no dash,'
+        if f.count('-') > 1 and dashes:
+            msg += 'over dashed,'
+        if f.count('—') > 0:
+            msg += 'em dash,'
+        if f.count('  ') > 0:
+            msg += 'misspaced'
+        if msg:
+            items.append(f'{file} ({msg})')
+    print(f'Found {len(items)} malformed filenames')
+    return items or ['Nothing Found']
+
 def check_files(files, extra, sdir, ddir, opts):
     missing = []
     older = []
@@ -576,6 +651,7 @@ def pick_files(results, opts):
     if opts['Extra']:
         which += extra
     return which
+
 
 if __name__ == '__main__':
     main()
