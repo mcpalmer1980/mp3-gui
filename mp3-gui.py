@@ -11,14 +11,14 @@ from mutagen.easyid3 import EasyID3 as ID3
 from shutil import copy
 
 ## G L O B A L  V A L U E S
-tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Show Artists',
+tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Artists',
         'Show Albums', 'Show non-MP3s', 'Make Artist Playlist', 'Make Album Playlists',
         'Fix Playlist', 'Change Theme')
 tooltips = {
     'Sync to Dest': 'Sync MP3s from source to dest folder',
     'Clean Dest': 'Remove files from dest missing in source folder',
     'Verify Filenames': 'Check for and fix mangled filenames',
-    'Show Artists': 'Show all artists in source folder (for fixing misspellings etc)',
+    'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
     'Show Albums': 'Show all albums with song counts in source folder',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
     'Artist Playlists': 'Make playlists for artists with x songs or more',
@@ -51,6 +51,8 @@ def main():
             clean_menu(window)
         elif event == 'Verify Filenames':
             verify_menu(window)
+        elif event == 'Artists':
+            category_menu(window, 'Artists')
         elif event == 'Copy':
             pyperclip.copy(print.buffer)
         else:
@@ -313,7 +315,7 @@ def verify_menu(window):
                     key="LIST")],
             [sg.Push(), sg.Button('Copy'), sg.Button('Close')] ]
     
-    window = sg.Window('Verify Filenames ', layout, modal=True, finalize=True)
+    window = sg.Window('Verify Filenames', layout, modal=True, finalize=True)
 
     while True:
         event, values = window.read()
@@ -338,11 +340,77 @@ def verify_menu(window):
         elif event == 'SOURCE':
             nsource = values['SOURCE']
             if comp_dir(source, nsource, True):
-                source = nsource
+                source = options['source'] = nsource
                 files = get_files(source, quiet=True)[0]
                 items = check_filenames(files)
                 window['LIST'].update(values=items)
 
+def category_menu(window, mode='Artists'):
+    source = options['source']
+    print('Opening filename menu')
+    boxes = ('MP3s', 'Other')
+    modes = ['Artists', 'Albums', 'Genres']
+
+    boxes = ['Sort by Count', 'Extra Details', ]
+    checked = {'Extra Details': False}
+
+    mode = 'Artists'
+    items = []
+    min_count = 1
+    opts = [0,0]
+    if mode == 'Artists':
+        list_items = list_artists
+        items = list_items(source, min_count, *opts)
+
+    layout = [[sg.Text('Source', size=10),
+                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.FolderBrowse(initial_folder=source, key="SBUT"),
+                sg.Push(), sg.Combo(modes, default_value=mode, readonly=True)],
+            [sg.Checkbox(box, key=box, enable_events=True,
+                default=checked.get(box, False)) for box in boxes],
+            [sg.Listbox(items, size=(100, 15),
+                    key="LIST")],
+            [sg.Text('Minimum Count'), sg.Input(1, size=3, enable_events=True, key='COUNT'),
+                sg.Push(), sg.Button('Make Playlists'),
+                sg.Button('Copy'), sg.Button('Close')] ]
+    
+    window = sg.Window('Category Lister', layout, modal=True, finalize=True)
+
+    while True:
+        event, values = window.read()
+
+        if event in ('Close', sg.WIN_CLOSED):
+            window.close()
+            break
+        elif event == 'Copy':
+            pyperclip.copy('\n'.join(items))
+        elif event == 'Clip Filenames' and extras:
+            s = ''
+            for f in extras:
+                s += os.path.join(dest, f) + '\n'
+            pyperclip.copy(s)
+        elif event == 'Swap':
+            source, dest = dest, source
+            window['SOURCE'].update(source)
+            window['DEST'].update(dest)
+            extras = update(source, dest, opts)
+        elif event in boxes:
+            opts = [values.get(k, False) for k in boxes]
+            items = list_items(source, min_count, *opts)
+            window['LIST'].update(values=items)
+        elif event == 'COUNT':
+            try:
+                min_count = int(values['COUNT'])
+            except:
+                continue
+            items = list_items(source, min_count, *opts)
+            window['LIST'].update(values=items)
+        elif event == 'SOURCE':
+            nsource = values['SOURCE']
+            if comp_dir(source, nsource, True):
+                source = options['source'] = nsource
+                items = list_items(source, min_count, *opts)
+                window['LIST'].update(values=items)
 
 ## U T I L I T Y  F U N C T I O N S
 _print = print
@@ -577,6 +645,45 @@ def get_artists(files, path):
         l.append((f, album))
         artists[artist] = l
     return artists
+
+def list_artists(path, min_count=1, by_count=False, details=False):
+    ti = time.perf_counter()
+    artl = []
+    if not hasattr(list_artists, 'history'):
+        list_artists.history = {}
+
+    path = os.path.normpath(path)
+    artists = list_artists.history.get(path, None)
+    if not artists:
+        files = get_files(path, quiet=True)[0]
+        artists = get_artists(files, path)
+        list_artists.history[path] = artists
+
+    outstr = {
+        (0,0): '{1}({0} songs)',
+        (0,1): '{1}({0} songs) - {2}',
+        (1,0): '{0:>5}{1}({0} songs)',
+        (1,1): '{0:>5}{1}({0} songs) - {2}'}[(by_count, details)]
+
+    for artist, info in artists.items():
+        l = len(info)
+        albums = {}
+        for i in info:
+            fn, album = i
+            c = albums.get(album, 0) + 1
+            albums[album] = c
+
+        album_list = []
+        for k, v in albums.items():
+            album_list.append(f'{k}({v})')
+
+        if l >= min_count:
+            artl.append(outstr.format(l, artist, album_list))
+    artl.sort(key=lambda x: x.lower(), reverse=by_count)
+    if by_count:
+        artl = [i[5:] for i in artl]
+    print(f'Found {len(artl)} artists in {path} ({time_str(ti)})')
+    return artl
 
 def get_files(path, extensions=('.mp3',), subfolders=True, quiet=False):
     'Create image list from given path and file extensions'
