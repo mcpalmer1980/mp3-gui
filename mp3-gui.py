@@ -19,7 +19,7 @@ tooltips = {
     'Clean Dest': 'Remove files from dest missing in source folder',
     'Verify Filenames': 'Check for and fix mangled filenames',
     'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
-    'Show Albums': 'Show all albums with song counts in source folder',
+    'Albums': 'Show all albums with song counts in source folder',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
     'Artist Playlists': 'Make playlists for artists with x songs or more',
     'Album Playlists': 'Make playlists for albums with x songs or more',
@@ -53,6 +53,8 @@ def main():
             verify_menu(window)
         elif event == 'Artists':
             category_menu(window, 'Artists')
+        elif event == 'Albums':
+            category_menu(window, 'Albums')
         elif event == 'Copy':
             pyperclip.copy(print.buffer)
         else:
@@ -81,17 +83,22 @@ def main_window(theme='DarkBlack1', size=16):
               [sg.Push(), sg.Button('Clear'), sg.Button('Copy'), sg.Button('Save')] ]
     return sg.Window('MP3 Gui', layout, font=options['font'], finalize=True)
 
-def theme_menu(parent):
+def theme_menu(parent, theme=None):
     font, size = options['font']
-    theme = options['theme']
-    layout = [[sg.Listbox(values=themes, size=(30,10), key='LIST')],
+    if theme:
+        sg.theme(theme)
+    else:
+        print('Changing theme')    
+
+    layout = [[sg.Listbox(values=themes, size=(30,10), key='LIST',
+                    enable_events=True)],
              [sg.Text('Size:'), sg.Slider(default_value=size, range=(6,24),
                     key='size', orientation='h')],
              [sg.Push(), sg.Button('Cancel'), sg.Button('Change')]]
  
-    print('Changing theme')    
     window = sg.Window("Theme Chooser", layout, modal=True,
             font=options['font'], finalize=True)
+    sg.theme(options['theme'])
 
     if theme in themes:
         i = themes.index(theme)
@@ -116,11 +123,15 @@ def theme_menu(parent):
             print('Canceled theme change')
             window.close()
             break
+        elif event == 'LIST':
+            theme = values['LIST'][0]
+            window.close()
+            return theme_menu(parent, theme)
     return parent
 
 def sync_menu(source='', dest=''):
     def update(results):
-        files, artists, folders, extra = results
+        files, folders, extra = results
         print.window = None
         options['source'] = source
         options['dest'] = dest
@@ -184,7 +195,7 @@ def sync_menu(source='', dest=''):
             if results:
                 final_results = update(results)
         elif event == 'Copy':
-            files, artists, folders, extra = results
+            files, folders, extra = results
             files = pick_files(final_results, opts)
             r = sg.popup_ok_cancel(f'Copy {len(files)} files to {dest}?', title='Copy')
             if r == 'Cancel':
@@ -299,7 +310,6 @@ def clean_menu(source='', dest=''):
         else:
             print(f'{event} {values}')
 
-
 def verify_menu(window):
     source = options['source']
     print('Opening filename menu')
@@ -347,19 +357,23 @@ def verify_menu(window):
 
 def category_menu(window, mode='Artists'):
     source = options['source']
-    print('Opening filename menu')
-    boxes = ('MP3s', 'Other')
     modes = ['Artists', 'Albums', 'Genres']
-
     boxes = ['Sort by Count', 'Extra Details', ]
-    checked = {'Extra Details': False}
-
-    mode = 'Artists'
+    checked = {'Sort by Count':False, 'Extra Details': True}
+    opts = [checked.get(k, False) for k in boxes]
     items = []
-    min_count = 1
-    opts = [0,0]
+
     if mode == 'Artists':
+        print('Opening Artists window')
+        title = "Artist Lister"
         list_items = list_artists
+        min_count = 1
+        items = list_items(source, min_count, *opts)
+    elif mode == 'Albums':
+        print('Opening Albums window')
+        title = "Album Lister"
+        list_items = list_albums
+        min_count = 3
         items = list_items(source, min_count, *opts)
 
     layout = [[sg.Text('Source', size=10),
@@ -370,12 +384,12 @@ def category_menu(window, mode='Artists'):
                 default=checked.get(box, False)) for box in boxes],
             [sg.Listbox(items, size=(100, 15),
                     key="LIST")],
-            [sg.Text('Minimum Count'), sg.Input(1, size=3, enable_events=True, key='COUNT'),
+            [sg.Text('Minimum Count'), sg.Input(min_count, size=3,
+                    enable_events=True, key='COUNT'),
                 sg.Push(), sg.Button('Make Playlists'),
                 sg.Button('Copy'), sg.Button('Close')] ]
     
-    window = sg.Window('Category Lister', layout, modal=True, finalize=True)
-
+    window = sg.Window(title, layout, modal=True, finalize=True)
     while True:
         event, values = window.read()
 
@@ -611,7 +625,6 @@ def copy_files(files, source, dest, opts):
             tags.save()
             _source = tmp
         copy(_source, _dest)
-        #print(_source)
         if clear:
             os.remove(tmp)
         time.sleep(.2)
@@ -685,6 +698,51 @@ def list_artists(path, min_count=1, by_count=False, details=False):
     print(f'Found {len(artl)} artists in {path} ({time_str(ti)})')
     return artl
 
+def get_albums(artists):
+    albums = {}
+    counts = {}
+    for artist, info in artists.items():
+        for i in info:
+            fn, album = i
+            album = f'{album.strip()} ({artist.strip()})'
+            l = albums.get(album, [])
+            l.append((fn, artist))
+            albums[album] = l
+            counts[album] = counts.get(album, 0) + 1
+    return albums, counts
+
+def list_albums(path, min_count=1, by_count=False, details=False):
+    def keyer(i):
+        return f'{1000-i[1]}{i[0]}'
+
+    ti = time.perf_counter()
+    if not hasattr(list_albums, 'history'):
+        list_albums.history = {}
+    path = os.path.normpath(path)
+    albums, counts = list_albums.history.get(path, (None, 0))
+    if not albums:
+        files = get_files(path, quiet=True)[0]
+        artists = get_artists(files, path)
+        albums, counts = get_albums(artists)
+        list_albums.history[path] = albums, counts
+
+
+    count = 10
+    count = min(min_count, len(albums))
+    album_list = sorted([(a,c) for a, c in counts.items()], key=keyer, reverse=True)
+
+    for a, c in album_list[-count:]:
+        print(f'{a} ({c})')
+        if details:
+            for song in albums.get(a, []):
+                print(f'  {song}') #{os.path.split(song)[1]}')
+    ti = (time.perf_counter() - ti) * 1000
+    print(f'found {len(album_list)} albums in {ti:0.2f}ms')
+
+    return albums.keys()
+
+
+
 def get_files(path, extensions=('.mp3',), subfolders=True, quiet=False):
     'Create image list from given path and file extensions'
     depth = len(path[1:].split(os.sep))
@@ -734,10 +792,9 @@ def load_data(source, dest):
 
     ti = time.perf_counter()
     files, extra, folders = get_files(source)
-    artists = get_artists(files, source)
     print(f'found {len(files)} MP3s, {len(extra)} other files in {time_str(ti)}')
 
-    return files, artists, folders, extra
+    return files, folders, extra
 
 def make_folders(dest, folders):
     for folder in folders:
