@@ -12,7 +12,7 @@ from shutil import copy
 
 ## G L O B A L  V A L U E S
 tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Artists',
-        'Show Albums', 'Show non-MP3s', 'Make Artist Playlist', 'Make Album Playlists',
+        'Show Albums', 'Show non-MP3s', 'Tags', 'Make Album Playlists',
         'Fix Playlist', 'Change Theme')
 tooltips = {
     'Sync to Dest': 'Sync MP3s from source to dest folder',
@@ -21,7 +21,7 @@ tooltips = {
     'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
     'Albums': 'Show all albums with song counts in source folder',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
-    'Artist Playlists': 'Make playlists for artists with x songs or more',
+    'Tags': 'Make playlists for artists with x songs or more',
     'Album Playlists': 'Make playlists for albums with x songs or more',
     'Fix Playlist': 'Normalize playlist for root folder and remove extra lines',
     'Change Theme': 'Change GUI colors and font size' }
@@ -57,6 +57,16 @@ def main():
             category_menu(window, 'Albums')
         elif event == 'Copy':
             pyperclip.copy(print.buffer)
+        elif event == 'Tags':
+            ti = time.perf_counter()
+            path = '/home/michael/Music'
+            files = get_files(path)
+            tags = get_tags(files, path)
+            print(f'Tags gathered in {time_str(ti)}')
+            #artists = tags[1]
+            #for a in list(artists.keys())[:10]:
+            #    for i in artists[a]:
+            #        print(i)
         else:
             print(f'{event}: {values}')
 
@@ -648,6 +658,56 @@ def find_unexpected(source, dest, opts):
             extra.append(file)
     return extra
 
+def get_tags(files, path, rescan=False):
+    class SongTag:
+        __slots__ = ('filename', 'title', 'artist', 'album', 'genre')
+        def __init__(self, filename, title, artist, album, genre):
+            self.filename = filename
+            self.title = title
+            self.artist = artist
+            self.album = album
+            self.genre = genre
+        def __repr__(self):
+            return f'SongTags ({self.title}, {self.artist}, {self.album}, {self.genre})'
+
+    if not hasattr(get_tags, 'history'):
+        get_tags.history = {}
+
+    path = os.path.normpath(path)    
+    loaded = get_tags.history.get(path, None)
+    if loaded and not rescan:
+        print(f'Loaded tag information for {path}')
+        return loaded
+
+    ti = time.perf_counter()
+    filenames = {}; artists = {}; albums = {}; genres = {}
+    for f in files[0]:
+        #print(f)
+        id3 = ID3(os.path.join(path, f))
+        artist = id3.get('Artist', [None,])[0]
+        tags = SongTag(
+            f,
+            id3.get('Title', [None,])[0],
+            artist,
+            id3.get('Album', [artist,])[0],
+            id3.get('Genre', [None,])[0])
+        art = artists.get(tags.artist, [])
+        alb = albums.get(tags.album, [])
+        gen = genres.get(tags.genre, [])
+        art.append(tags)
+        alb.append(tags)
+        gen.append(tags)
+        artists[tags.artist] = art
+        albums[tags.album] = alb
+        genres[tags.genre] = gen
+        filenames[f] = tags
+
+    print(f'Scanned for tags in {path} ({time_str(ti)})')
+    get_tags.history[path] = artists, albums, genres, filenames
+    return get_tags.history[path]
+
+
+
 def get_artists(files, path):
     artists = {}
     for f in files:
@@ -665,12 +725,18 @@ def list_artists(path, min_count=1, by_count=False, details=False):
     if not hasattr(list_artists, 'history'):
         list_artists.history = {}
 
+    '''
     path = os.path.normpath(path)
     artists = list_artists.history.get(path, None)
+
     if not artists:
         files = get_files(path, quiet=True)[0]
         artists = get_artists(files, path)
         list_artists.history[path] = artists
+    '''
+
+    files = get_files(path, quiet=True)
+    artists, albums, genres, filenames = get_tags(files, path)
 
     outstr = {
         (0,0): '{1}({0} songs)',
@@ -681,10 +747,10 @@ def list_artists(path, min_count=1, by_count=False, details=False):
     for artist, info in artists.items():
         l = len(info)
         albums = {}
-        for i in info:
-            fn, album = i
-            c = albums.get(album, 0) + 1
-            albums[album] = c
+        for song in info:
+            #fn, album = i
+            c = albums.get(song.album, 0) + 1
+            albums[song.album] = c
 
         album_list = []
         for k, v in albums.items():
