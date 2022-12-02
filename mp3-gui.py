@@ -20,8 +20,8 @@ tooltips = {
     'Verify Filenames': 'Check for and fix mangled filenames',
     'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
     'Albums': 'Show all albums with song counts in source folder',
+    'Genres': 'Show all genres',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
-    'Tags': 'Make playlists for artists with x songs or more',
     'Album Playlists': 'Make playlists for albums with x songs or more',
     'Fix Playlist': 'Normalize playlist for root folder and remove extra lines',
     'Change Theme': 'Change GUI colors and font size' }
@@ -55,18 +55,10 @@ def main():
             category_menu(window, 'Artists')
         elif event == 'Albums':
             category_menu(window, 'Albums')
+        elif event == 'Genres':
+            category_menu(window, 'Genres')
         elif event == 'Copy':
             pyperclip.copy(print.buffer)
-        elif event == 'Tags':
-            ti = time.perf_counter()
-            path = '/home/michael/Music'
-            files = get_files(path)
-            tags = get_tags(files, path)
-            print(f'Tags gathered in {time_str(ti)}')
-            #artists = tags[1]
-            #for a in list(artists.keys())[:10]:
-            #    for i in artists[a]:
-            #        print(i)
         else:
             print(f'{event}: {values}')
 
@@ -385,6 +377,12 @@ def category_menu(window, mode='Artists'):
         list_items = list_albums
         min_count = 3
         items = list_items(source, min_count, *opts)
+    elif mode == 'Genres':
+        print('Opening Genres window')
+        title = "Genre Lister"
+        list_items = list_genres
+        min_count = 1
+        items = list_items(source, min_count, *opts)
 
     layout = [[sg.Text('Source', size=10),
                 sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
@@ -393,8 +391,8 @@ def category_menu(window, mode='Artists'):
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=checked.get(box, False)) for box in boxes],
             [sg.Listbox(items, size=(100, 15),
-                    key="LIST")],
-            [sg.Text('Minimum Count'), sg.Input(min_count, size=3,
+                    key="LIST", horizontal_scroll=True)],
+            [sg.Text('Minimum Count'), sg.Input(min_count, size=5,
                     enable_events=True, key='COUNT'),
                 sg.Push(), sg.Button('Make Playlists'),
                 sg.Button('Copy'), sg.Button('Close')] ]
@@ -676,7 +674,7 @@ def get_tags(files, path, rescan=False):
     path = os.path.normpath(path)    
     loaded = get_tags.history.get(path, None)
     if loaded and not rescan:
-        print(f'Loaded tag information for {path}')
+        #print(f'Loaded tag information for {path}')
         return loaded
 
     ti = time.perf_counter()
@@ -706,43 +704,20 @@ def get_tags(files, path, rescan=False):
     get_tags.history[path] = artists, albums, genres, filenames
     return get_tags.history[path]
 
-
-
-def get_artists(files, path):
-    artists = {}
-    for f in files:
-        tags = ID3(os.path.join(path, f))
-        artist = tags.get('Artist', [None,])[0]
-        album = tags.get('Album', [artist,])[0]
-        l = artists.get(artist, [])
-        l.append((f, album))
-        artists[artist] = l
-    return artists
-
 def list_artists(path, min_count=1, by_count=False, details=False):
     ti = time.perf_counter()
     artl = []
     if not hasattr(list_artists, 'history'):
         list_artists.history = {}
 
-    '''
-    path = os.path.normpath(path)
-    artists = list_artists.history.get(path, None)
-
-    if not artists:
-        files = get_files(path, quiet=True)[0]
-        artists = get_artists(files, path)
-        list_artists.history[path] = artists
-    '''
-
     files = get_files(path, quiet=True)
     artists, albums, genres, filenames = get_tags(files, path)
 
     outstr = {
-        (0,0): '{1}({0} songs)',
-        (0,1): '{1}({0} songs) - {2}',
-        (1,0): '{0:>5}{1}({0} songs)',
-        (1,1): '{0:>5}{1}({0} songs) - {2}'}[(by_count, details)]
+        (0,0): '{1} ({0} songs)',
+        (0,1): '{1} ({0} songs) - {2}',
+        (1,0): '{0:>5}{1} ({0} songs)',
+        (1,1): '{0:>5}{1} ({0} songs) - {2}'}[(by_count, details)]
 
     for artist, info in artists.items():
         l = len(info)
@@ -764,48 +739,72 @@ def list_artists(path, min_count=1, by_count=False, details=False):
     print(f'Found {len(artl)} artists in {path} ({time_str(ti)})')
     return artl
 
-def get_albums(artists):
-    albums = {}
-    counts = {}
-    for artist, info in artists.items():
-        for i in info:
-            fn, album = i
-            album = f'{album.strip()} ({artist.strip()})'
-            l = albums.get(album, [])
-            l.append((fn, artist))
-            albums[album] = l
-            counts[album] = counts.get(album, 0) + 1
-    return albums, counts
-
 def list_albums(path, min_count=1, by_count=False, details=False):
     def keyer(i):
         return f'{1000-i[1]}{i[0]}'
-
     ti = time.perf_counter()
-    if not hasattr(list_albums, 'history'):
-        list_albums.history = {}
-    path = os.path.normpath(path)
-    albums, counts = list_albums.history.get(path, (None, 0))
-    if not albums:
-        files = get_files(path, quiet=True)[0]
-        artists = get_artists(files, path)
-        albums, counts = get_albums(artists)
-        list_albums.history[path] = albums, counts
 
+    files = get_files(path, quiet=True)
+    artists, albums, genres, filenames = get_tags(files, path)
 
-    count = 10
-    count = min(min_count, len(albums))
-    album_list = sorted([(a,c) for a, c in counts.items()], key=keyer, reverse=True)
+    if by_count:
+        album_list = sorted([(a,len(c)) for a, c in albums.items()
+                if len(c) >= min_count], key=keyer)
+    else:
+        album_list = sorted([(a,len(c)) for a, c in albums.items()
+                if len(c) >= min_count], key=lambda x: x[0].lower())
 
-    for a, c in album_list[-count:]:
-        print(f'{a} ({c})')
+    outp = []
+    for a, c in album_list:
+        s = (f'{a} ({c})')
         if details:
-            for song in albums.get(a, []):
-                print(f'  {song}') #{os.path.split(song)[1]}')
+            d = ', '.join([a.title for a in albums[a]])
+            s += f' - {d}'
+        outp.append(s)
     ti = (time.perf_counter() - ti) * 1000
     print(f'found {len(album_list)} albums in {ti:0.2f}ms')
+    return outp
 
-    return albums.keys()
+def list_genres(path, min_count=1, by_count=False, details=False, unfold=True):
+    def keyer(i):
+        return f'{1000-i[1]}{i[0]}'
+    ti = time.perf_counter()
+
+    files = get_files(path, quiet=True)
+    artists, albums, genres, filenames = get_tags(files, path)
+
+    if by_count:
+        gkeyer = lambda x: len(genres[x])
+        akeyer = lambda x: gart[x]
+        reverse = True
+    else:
+        gkeyer = akeyer = lambda x: x.lower()
+        reverse = False
+
+    glist = []
+    for g in sorted(genres.keys(), key=gkeyer, reverse=reverse):
+        songs = genres[g]
+        scount = len(songs)
+        gart = {}
+        for song in songs:
+            gart[song.artist] = gart.get(song.artist, 0) + 1
+
+
+        gstr = f'{g} ({scount} songs by {len(gart)} artists)'
+        if scount < min_count:
+            pass
+        elif details:
+            if unfold:
+                glist.append(gstr)
+                for k in sorted(gart.keys(), key=akeyer, reverse=reverse):
+                    glist.append(f'    {k} ({gart[k]})')
+            else:
+                gstr += ' - ' + ', '.join([f'{k}({v})' for k, v in gart.items() if v >= min_count])
+                glist.append(gstr)
+        else:
+            glist.append(gstr)
+    return glist
+
 
 
 
