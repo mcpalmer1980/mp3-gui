@@ -4,11 +4,11 @@ TODO:
 update initial folder in sync window when text changes
 
 '''
-
 import os, sys, pickle, time, pyperclip, zlib
 import PySimpleGUI as sg
 from mutagen.easyid3 import EasyID3 as ID3
 from shutil import copy
+from io import StringIO
 
 ## G L O B A L  V A L U E S
 tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Artists',
@@ -42,7 +42,7 @@ def main():
         if event == sg.WIN_CLOSED or event == 'Cancel':
             break
         elif event == 'Clear':
-            print.buffer = ''
+            print.buffer = StringIO()
         elif event == "Change Theme":
             window = theme_menu(window)
         elif event == "Sync to Dest":
@@ -58,11 +58,11 @@ def main():
         elif event == 'Genres':
             category_menu(window, 'Genres')
         elif event == 'Copy':
-            pyperclip.copy(print.buffer)
+            pyperclip.copy(print.buffer.getvalue())
         else:
             print(f'{event}: {values}')
 
-        window["CONSOLE"].update(print.buffer)
+        window["CONSOLE"].update(print.buffer.getvalue())
 
     print.window = None
     window.close()
@@ -80,7 +80,8 @@ def main_window(theme='DarkBlack1', size=16):
     sg.theme(theme)
     layout = [[sg.Button(opt, tooltip=tooltips[opt]) for opt in opt1],
               [sg.Button(opt, tooltip=tooltips[opt]) for opt in opt2],
-              [sg.Multiline(default_text=print.buffer, enable_events=False, size=(120, 20),
+              [sg.Multiline(default_text=print.buffer.getvalue(),
+                    enable_events=False, size=(120, 20),
                     key="CONSOLE", write_only=True, disabled=True, autoscroll=True)],
               [sg.Push(), sg.Button('Clear'), sg.Button('Copy'), sg.Button('Save')] ]
     return sg.Window('MP3 Gui', layout, font=options['font'], finalize=True)
@@ -142,14 +143,14 @@ def sync_menu(source='', dest=''):
             window['Copy'].update(disabled=False)
             window['Clip Filenames'].update(disabled=False)
             scanned = True
-        window['CONSOLE'].update(print.buffer)
+        window['CONSOLE'].update(print.buffer.getvalue())
         window.Refresh()
         return results
 
     source = options.get('source', source)
     dest = options.get('dest', dest)
     print('Opening sync menu')
-    print.buffer, _buffer = getattr(sync_menu, 'buffer', ''), print.buffer # save a backup
+    print.buffer, _buffer = getattr(sync_menu, 'buffer', StringIO()), print.buffer # save a backup
     boxes = ('Missing', 'Different', 'Same', 'Extra', 'Clear', 'CRC')
     checked = dict(Missing=True)
     scanned = False
@@ -175,7 +176,7 @@ def sync_menu(source='', dest=''):
                     sg.Button('Scan'), sg.Button('Copy', disabled=True)] ]
     
     window = sg.Window('Sync Files', layout, modal=True, finalize=True)
-    window['CONSOLE'].update(print.buffer)
+    window['CONSOLE'].update(print.buffer.getvalue())
     results = False
     while True:
         print.window = window
@@ -189,7 +190,7 @@ def sync_menu(source='', dest=''):
             window.close()
             break
         elif event == 'Scan':
-            print.buffer = ''
+            print.buffer = StringIO()
             window['Copy'].update(disabled=True)
             window['Clip Filenames'].update(disabled=True)
             results = load_data(source, dest)
@@ -210,7 +211,7 @@ def sync_menu(source='', dest=''):
         elif event == 'Clip Filenames':
             clip_files(final_results, opts)
         elif event in boxes and results:
-            print.buffer = ''
+            print.buffer = StringIO()
             final_results = update(results)
             if not final_results:
                 window['Copy'].update(disabled=True)
@@ -358,39 +359,32 @@ def verify_menu(window):
                 window['LIST'].update(values=items)
 
 def category_menu(window, mode='Artists'):
+    def set_mode(mode):
+        if mode == 'Artists':
+            print('Opening Artists window')
+            return "Artist Lister", list_artists, 1
+        elif mode == 'Albums':
+            print('Opening Albums window')
+            return "Album Lister", list_albums, 3
+        elif mode == 'Genres':
+            print('Opening Genres window')
+            return "Genre Lister", list_genres, 1
+
     source = options['source']
     modes = ['Artists', 'Albums', 'Genres']
-    boxes = ['Sort by Count', 'Extra Details', ]
+    boxes = ['Sort by Count', 'Extra Details', 'Unfold Details']
     checked = {'Sort by Count':False, 'Extra Details': True}
     opts = [checked.get(k, False) for k in boxes]
-    items = []
-
-    if mode == 'Artists':
-        print('Opening Artists window')
-        title = "Artist Lister"
-        list_items = list_artists
-        min_count = 1
-        items = list_items(source, min_count, *opts)
-    elif mode == 'Albums':
-        print('Opening Albums window')
-        title = "Album Lister"
-        list_items = list_albums
-        min_count = 3
-        items = list_items(source, min_count, *opts)
-    elif mode == 'Genres':
-        print('Opening Genres window')
-        title = "Genre Lister"
-        list_items = list_genres
-        min_count = 1
-        items = list_items(source, min_count, *opts)
+    title, list_items, min_count = set_mode(mode)
 
     layout = [[sg.Text('Source', size=10),
                 sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT"),
-                sg.Push(), sg.Combo(modes, default_value=mode, readonly=True)],
+                sg.Push(), sg.Combo(modes, default_value=mode, readonly=True,
+                    enable_events=True, key='MODE')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=checked.get(box, False)) for box in boxes],
-            [sg.Listbox(items, size=(100, 15),
+            [sg.Listbox(['Scanning...'], size=(100, 15),
                     key="LIST", horizontal_scroll=True)],
             [sg.Text('Minimum Count'), sg.Input(min_count, size=5,
                     enable_events=True, key='COUNT'),
@@ -398,6 +392,8 @@ def category_menu(window, mode='Artists'):
                 sg.Button('Copy'), sg.Button('Close')] ]
     
     window = sg.Window(title, layout, modal=True, finalize=True)
+    items, indexes = list_items(source, min_count, *opts)
+    window['LIST'].update(items)
     while True:
         event, values = window.read()
 
@@ -418,37 +414,45 @@ def category_menu(window, mode='Artists'):
             extras = update(source, dest, opts)
         elif event in boxes:
             opts = [values.get(k, False) for k in boxes]
-            items = list_items(source, min_count, *opts)
+            items, indexes = list_items(source, min_count, *opts)
             window['LIST'].update(values=items)
         elif event == 'COUNT':
             try:
                 min_count = int(values['COUNT'])
             except:
                 continue
-            items = list_items(source, min_count, *opts)
+            items, indexes = list_items(source, min_count, *opts)
             window['LIST'].update(values=items)
         elif event == 'SOURCE':
             nsource = values['SOURCE']
             if comp_dir(source, nsource, True):
                 source = options['source'] = nsource
-                items = list_items(source, min_count, *opts)
+                items, indexes = list_items(source, min_count, *opts)
                 window['LIST'].update(values=items)
+        elif event == 'MODE':
+            title, list_items, min_count = set_mode(values['MODE'])
+            items, indexes = list_items(source, min_count, *opts)
+            window['LIST'].update(items)
+            window['COUNT'].update(min_count)
+            window.set_title(title)
 
 ## U T I L I T Y  F U N C T I O N S
 _print = print
-def print(line):
+def print(*args, **kargs):
     if print.quiet:
         return
-    line = str(line)
-    _print(line)
-    print.buffer += line+'\n'
+    #line = str(line)
+    _print(*args, **kargs)
+    _print(*args, file=print.buffer, **kargs)
+    #_print(line, file=print.buffer)
+    #print.buffer += line+'\n'
     if print.window:
         try:
-            print.window['CONSOLE'].update(print.buffer)
+            print.window['CONSOLE'].update(print.buffer.getvalue())
             print.window.Refresh()
         except:
             pass
-print.buffer = '' 
+print.buffer = StringIO()
 print.window = None
 print.quiet = False
 
@@ -704,9 +708,10 @@ def get_tags(files, path, rescan=False):
     get_tags.history[path] = artists, albums, genres, filenames
     return get_tags.history[path]
 
-def list_artists(path, min_count=1, by_count=False, details=False):
+def list_artists(path, min_count=1, by_count=False, details=False, unfold=False):
     ti = time.perf_counter()
     artl = []
+    arti = []
     if not hasattr(list_artists, 'history'):
         list_artists.history = {}
 
@@ -733,13 +738,14 @@ def list_artists(path, min_count=1, by_count=False, details=False):
 
         if l >= min_count:
             artl.append(outstr.format(l, artist, album_list))
+            arti.append(artist)
     artl.sort(key=lambda x: x.lower(), reverse=by_count)
     if by_count:
         artl = [i[5:] for i in artl]
     print(f'Found {len(artl)} artists in {path} ({time_str(ti)})')
-    return artl
+    return artl, arti
 
-def list_albums(path, min_count=1, by_count=False, details=False):
+def list_albums(path, min_count=1, by_count=False, details=False, unfold=False):
     def keyer(i):
         return f'{1000-i[1]}{i[0]}'
     ti = time.perf_counter()
@@ -754,18 +760,19 @@ def list_albums(path, min_count=1, by_count=False, details=False):
         album_list = sorted([(a,len(c)) for a, c in albums.items()
                 if len(c) >= min_count], key=lambda x: x[0].lower())
 
-    outp = []
+    albl = []
+    albi = []
     for a, c in album_list:
         s = (f'{a} ({c})')
         if details:
             d = ', '.join([a.title for a in albums[a]])
             s += f' - {d}'
-        outp.append(s)
-    ti = (time.perf_counter() - ti) * 1000
-    print(f'found {len(album_list)} albums in {ti:0.2f}ms')
-    return outp
+        albl.append(s)
+        albi.append(a)
+    print(f'found {len(album_list)} albums in {path} ({time_str(ti)})')
+    return albl, albi
 
-def list_genres(path, min_count=1, by_count=False, details=False, unfold=True):
+def list_genres(path, min_count=1, by_count=False, details=False, unfold=False):
     def keyer(i):
         return f'{1000-i[1]}{i[0]}'
     ti = time.perf_counter()
@@ -781,7 +788,9 @@ def list_genres(path, min_count=1, by_count=False, details=False, unfold=True):
         gkeyer = akeyer = lambda x: x.lower()
         reverse = False
 
+    gcount = 0
     glist = []
+    gindex = []
     for g in sorted(genres.keys(), key=gkeyer, reverse=reverse):
         songs = genres[g]
         scount = len(songs)
@@ -794,16 +803,22 @@ def list_genres(path, min_count=1, by_count=False, details=False, unfold=True):
         if scount < min_count:
             pass
         elif details:
+            gcount += 1
             if unfold:
                 glist.append(gstr)
                 for k in sorted(gart.keys(), key=akeyer, reverse=reverse):
                     glist.append(f'    {k} ({gart[k]})')
+                    gindex.append(None)
             else:
                 gstr += ' - ' + ', '.join([f'{k}({v})' for k, v in gart.items() if v >= min_count])
                 glist.append(gstr)
+                gindex.append(g)
         else:
+            gcount += 1
             glist.append(gstr)
-    return glist
+            gindex.append(g)
+    print(f'found {gcount} genres in {path} ({time_str(ti)})')
+    return glist, gindex
 
 
 
