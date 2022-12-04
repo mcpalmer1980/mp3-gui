@@ -4,13 +4,14 @@ TODO:
 update initial folder in sync window when text changes
 
 '''
-import os, sys, pickle, time, pyperclip, zlib
+import os, sys, pickle, time, pyperclip, zlib, textwrap
 import PySimpleGUI as sg
 from mutagen.easyid3 import EasyID3 as ID3
 from shutil import copy
 from io import StringIO
 
 ## G L O B A L  V A L U E S
+icon = b'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bXAub3JnL3htcC8iCiAgICB4bWxuczp0aWZmPSJodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyIKICAgIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIKICAgeG1wTU06RG9jdW1lbnRJRD0iZ2ltcDpkb2NpZDpnaW1wOjI2NDMwZTc4LWQ2YjYtNDk3Mi1iMDMyLThlYWVmMTQ4ZGZmOSIKICAgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDozYjBjNjJkYi00MWNhLTQyNTYtOWNiNi0xZjg4MzhlMWQyZGIiCiAgIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDpjNjZmNzNhMS00ZTQzLTRkNTktODVjNy1jZmY5NThiY2U2ZmEiCiAgIGRjOkZvcm1hdD0iaW1hZ2UvcG5nIgogICBHSU1QOkFQST0iMi4wIgogICBHSU1QOlBsYXRmb3JtPSJMaW51eCIKICAgR0lNUDpUaW1lU3RhbXA9IjE2NzAxNTg4OTk1NDA2NTciCiAgIEdJTVA6VmVyc2lvbj0iMi4xMC4zMiIKICAgdGlmZjpPcmllbnRhdGlvbj0iMSIKICAgeG1wOkNyZWF0b3JUb29sPSJHSU1QIDIuMTAiCiAgIHhtcDpNZXRhZGF0YURhdGU9IjIwMjI6MTI6MDRUMDg6MDE6MzctMDU6MDAiCiAgIHhtcDpNb2RpZnlEYXRlPSIyMDIyOjEyOjA0VDA4OjAxOjM3LTA1OjAwIj4KICAgPHhtcE1NOkhpc3Rvcnk+CiAgICA8cmRmOlNlcT4KICAgICA8cmRmOmxpCiAgICAgIHN0RXZ0OmFjdGlvbj0ic2F2ZWQiCiAgICAgIHN0RXZ0OmNoYW5nZWQ9Ii8iCiAgICAgIHN0RXZ0Omluc3RhbmNlSUQ9InhtcC5paWQ6YjE3OTIyMmMtYjJjOC00NDNjLWFlOGUtODY0NTgwMTJmNmJjIgogICAgICBzdEV2dDpzb2Z0d2FyZUFnZW50PSJHaW1wIDIuMTAgKExpbnV4KSIKICAgICAgc3RFdnQ6d2hlbj0iMjAyMi0xMi0wNFQwODowMTozOS0wNTowMCIvPgogICAgPC9yZGY6U2VxPgogICA8L3htcE1NOkhpc3Rvcnk+CiAgPC9yZGY6RGVzY3JpcHRpb24+CiA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgCjw/eHBhY2tldCBlbmQ9InciPz4Y6lR8AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAB3RJTUUH5gwEDQEn8pI/EAAABg1JREFUeNrt3T1y4zoQhVFBpVjesQPv2N4AJpnAgafGkgAS6HtO1Qvf2CbZH5uSf9qFAXp3DI7SmmMw8Gg6BAZeDAQAQy8EAoDBFwIBwOALgQAYfERAAAw/QiAABh8READDjwgIgOFHBATA8CMCAmD4EQEBMPiIwFauDgG2QBuAE45NQAAMPyIgAIYfEfAaAHhEtAE4qdgEBMDwIwQeAcAjQRk3J2+8t/cv8/OAz4+7g+ARYO8AGPqqIaj9KNAMv8EXgdwI3FxyBp/f3lTqhaDVPFGG3xZgG7ABGHym3GTqRMDbgAhtsEIBmLv+uyg5+lFTANyREAEBMPysG4G9Q3CtcyLA9WcDcPdHBAQAEACwBQiA9R8REAA4LAJ7hEAAIHgbEAAIjoAAQDABgOAtQAAgOAICAIdGYK0QCAAEbwMCwJJ8I5YAgC1AAEAEBABEQABABAQAREAAQAQEYDBvQZESAQGA4AgIAARHQAAgOAICAMEREAAIjoAAQHAEBACCIyAAEBwBAYDgCAgABEdAACA4AgIAwQQAgrcAAYDgCAgAeAQAErcAAQAbAJC4BQgA2ACAxC1AAMAGAOvx25nnbwECADYAsAUIACAAYAsQAFgqAkIw3s0hYPdt4PPj7sAIAKKwntXjJAAQvLF4DQCCNxYBgOAICAAER0AAIDgCAgDBBAAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAO9uKfBuu94kHxxyZr8teFhwag5vBT17/CnhyGq+FHGO4CYPgRAQEw/CAAYAsQAHd/REAAAAEABAAQAGB7t3M+bBvwb/Tin1ubePy9nstpAWgD/52+6Oe2+sdvCwbhf1+7aBXaAFhLO3jI2oD/RxAEgI1C0Db6XHNca1ywFdb/ise1fftv5ufq3IUGgDUjcMZQioAALLeeOi7Hf75CEBYAJ9zxdU3YADBQCICLe4Xj1J1XAQBWV+T7AGZ8V+BO+i+PUeLW4vsEbACG4u8g9MWPl2G1AXDAkLWTP05/IAKe5W0A7uYF7rT9yS2kuy5sAGSHphvkGhvASiexGU5fpwA4BCAAXgcAAQAEoDybQsb58vwvAGweQbEWgFMvGHeR885jc94m2+D7AEa/B/zMT7VVex/a27FsEQAVrzdwzXXjEWD2CXVXmXNcesFrxQZgAKZcSKv8KGpKDA2+ALizGzAqPgIA4QF49XWA3X6nnfXao44AYPgfjIAQLBoAJ8bwu9ZsAJEXpOEXAQE48SLw/L/O8Du+Kwl4G9CdYL0BPerXmPu14ALApnflPigGIlDsEcB6Ou5r7Rff3msDwN19k6/j2U3AFiAAhjw8AhR5BDBEEB4Aw8ozjwHYAAABsFGAABCzxot8sQA4ofCqmwGf+XFS339uE46xF/HCAoAgGHwBWGojcTGe/yzvcdFrAMNOrAtj/+F2jjcIgDsn2ABwh3NsBMBJxnUhAC4Qz//OrQCA4RcAJx3XweFuLhTGH1fv8wsAQjA9BAa/aAC6i6HcptUMfm4AesEL2nF6/Wtrht0GgA2Bs3gbEAQAEABAAH7W/Egf5b29fwkAIAC2ANz9i3vibcDWLpfu/RsMfu4jQGu2AQx/5Abw0yOBjQADHxiAVV4bGBsgFwkeAQABAAQAEABAAAABAAQAEABAAAABAAQAEABAAAABAARgWZ8fdwcBAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABCAc/m1YCRcZwIANgBsAQjAtlpzKnGDsQHYAkAARIDka+r3G7EAQPANpVAA5r4OYAug4nVkAxABSl0/j90IBUAECL5uCr591vtRH+nt/cuVzULD//hjsACIAGXu+gJwSgSEgPPX/edeBBcAkaDEc74AbBEBWGX4L5fS7wL4+QAIDgC4+wc/AngUwPDbADwKgEcAcGOLfATwKIDhFwARwPCnB0AEMPzhARABDH94AEQAwx8eABEge/gFQAQIHn4BEAKCh18ARIDQwRcAISB48AVABAgefAEQA8KHXwCEgMChFwAxIHjov/sDGBifz8Hi978AAAAASUVORK5CYII='
 tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Artists',
         'Show Albums', 'Show non-MP3s', 'Tags', 'Make Album Playlists',
         'Fix Playlist', 'Change Theme')
@@ -22,7 +23,7 @@ tooltips = {
     'Albums': 'Show all albums with song counts in source folder',
     'Genres': 'Show all genres',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
-    'Album Playlists': 'Make playlists for albums with x songs or more',
+    'Browser': 'Make playlists for albums with x songs or more',
     'Fix Playlist': 'Normalize playlist for root folder and remove extra lines',
     'Change Theme': 'Change GUI colors and font size' }
 tools = list(tooltips.keys())
@@ -57,6 +58,8 @@ def main():
             category_menu(window, 'Albums')
         elif event == 'Genres':
             category_menu(window, 'Genres')
+        elif event == 'Browser':
+            browser('/home/michael')
         elif event == 'Copy':
             pyperclip.copy(print.buffer.getvalue())
         else:
@@ -84,7 +87,7 @@ def main_window(theme='DarkBlack1', size=16):
                     enable_events=False, size=(120, 20),
                     key="CONSOLE", write_only=True, disabled=True, autoscroll=True)],
               [sg.Push(), sg.Button('Clear'), sg.Button('Copy'), sg.Button('Save')] ]
-    return sg.Window('MP3 Gui', layout, font=options['font'], finalize=True)
+    return sg.Window('MP3 Gui', layout, font=options['font'], icon=icon, finalize=True)
 
 def theme_menu(parent, theme=None):
     font, size = options['font']
@@ -407,6 +410,8 @@ def category_menu(window, mode='Artists'):
             for f in extras:
                 s += os.path.join(dest, f) + '\n'
             pyperclip.copy(s)
+        elif event == 'Make Playlists':
+            make_playlist(songs, mode, source, min_count)
         elif event in boxes:
             if event=='Unfold Details' and values.get('Unfold Details', False):
                 window['Extra Details'].update(True)
@@ -438,7 +443,7 @@ def category_menu(window, mode='Artists'):
             selected = window['LIST'].GetIndexes()[0]
             key = indexes[selected]
             if indexes[selected]:
-                value = input_menu('Change Value', default=key)
+                value = sg.popup_get_text('', title='Change Value', default_text=key)
                 if value and value != key:
                     attr = mode.lower()[:-1] # exp: Artists -> artist
                     print(f'Changing {attr} from {key} to {value}')
@@ -452,7 +457,6 @@ def category_menu(window, mode='Artists'):
                             scroll_to_index=max(selected-3, 0))
 
 
-
 def input_menu(title, default='None', text=''):
     size = max(50, len(title), len(text))
     layout = [[sg.Text(text)],
@@ -463,6 +467,69 @@ def input_menu(title, default='None', text=''):
     window.close()
     if event == 'Okay':
         return values['INPUT']
+
+def browser(path, types=None):
+    PATH_LENGTH = 60
+    BOX_HEIGHT = 15
+    def get_listing(path, window=None):
+        folders = []; files = []
+        path = os.path.normpath(path)
+        for f in sorted(os.listdir(path), key=lambda x:x.lower()):
+            p = os.path.join(path, f)
+            if os.path.isdir(p):
+                folders.append('/'+f)
+            else:
+                files.append(f)
+
+        p = path
+        parents = [path[-PATH_LENGTH:]]
+        while True:
+            p = os.path.normpath(os.path.join(p, '..'))
+            parents.append(p[-PATH_LENGTH:])
+            if p == os.path.sep:
+                break
+        items = folders+files
+        if window != None:
+            window['LIST'].update(items)
+            window['PARENTS'].update(parents[0] or '/', values=parents[1:])
+        return items, parents
+
+    items, parents = get_listing(path)
+    layout = [[sg.Combo(parents[1:], size=PATH_LENGTH,
+                    default_value=parents[0], key='PARENTS',
+                    enable_events=True, bind_return_key=True),
+                sg.Push(), sg.Button('^', key='UP')],
+            [sg.Listbox(items, size = (PATH_LENGTH+5, BOX_HEIGHT), key='LIST', enable_events=True)],
+            [sg.Push(), sg.Button('Cancel'), sg.Button('Okay')]]
+    window = sg.Window('File Chooser', layout, modal=True)
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            break
+        elif event == 'UP':
+            path = os.path.normpath(os.path.join(path, '..'))
+            items, parents = get_listing(path, window)
+        elif event == 'PARENTS':
+            v = values[event]
+            if v in parents:
+                index = parents.index(v)
+                for _ in range(index):
+                    path = os.path.normpath(os.path.join(path, '..'))
+            elif os.path.isdir(v):
+                path = v
+            else:
+                path = path
+            items, parents = get_listing(path, window)
+        elif event == 'LIST':
+            clicked = values[event][0]
+            if clicked.startswith('/'):
+                p = os.path.join(path, values[event][0][1:])
+                print(path, values[event][0], p)
+                if os.path.isdir(p):
+                    path = p
+                    items, parents = get_listing(path, window)
+
+    window.close()
 
 
 ## U T I L I T Y  F U N C T I O N S
@@ -689,6 +756,42 @@ def find_unexpected(source, dest, opts):
             extra.append(file)
     return extra
 
+def get_files(path, extensions=('.mp3',), subfolders=True, quiet=False):
+    'Create image list from given path and file extensions'
+    depth = len(path[1:].split(os.sep))
+    trim = len(path) if path.endswith(os.sep) else len(path) + 1
+    files = []
+    extra = []
+    folders = []
+    print.quiet = quiet
+
+    print(f'Scanning files in {path}')
+    total = 0
+    if subfolders:
+        for (dirpath, dirnames, filenames) in os.walk(path):
+            sp = dirpath[1:].split(os.sep)
+            dots = '.'*(len(sp) - depth)
+            in_folder = 0
+            for filename in filenames:
+                total += 1
+                if os.path.splitext(filename)[-1].lower() in extensions:
+                    files.append(os.path.join(dirpath, filename)[trim:])
+                    in_folder += 1
+                else:
+                    extra.append(os.path.join(dirpath, filename)[trim:])
+            for dirname in dirnames:
+                folders.append(os.path.join(dirpath, dirname)[trim:])
+            if in_folder:
+                print(f'  {dots}{sp[-1]}: {in_folder} MP3s')
+    else:
+        for f in os.listdir(path):
+            if os.path.splitext(f)[-1].lower() in extensions:
+                files.append(os.path.join(path, f))
+                total += 1
+
+    print.quiet = False
+    return files, extra, folders
+
 def get_tags(files, path, rescan=False):
     class SongTag:
         __slots__ = ('filename', 'title', 'artist', 'album', 'genre')
@@ -875,45 +978,6 @@ def list_genres(path, min_count=1, by_count=False, details=False, unfold=False):
     print(f'found {gcount} genres in {path} ({time_str(ti)})')
     return glist, gindex, genres
 
-
-
-
-def get_files(path, extensions=('.mp3',), subfolders=True, quiet=False):
-    'Create image list from given path and file extensions'
-    depth = len(path[1:].split(os.sep))
-    trim = len(path) if path.endswith(os.sep) else len(path) + 1
-    files = []
-    extra = []
-    folders = []
-    print.quiet = quiet
-
-    print(f'Scanning files in {path}')
-    total = 0
-    if subfolders:
-        for (dirpath, dirnames, filenames) in os.walk(path):
-            sp = dirpath[1:].split(os.sep)
-            dots = '.'*(len(sp) - depth)
-            in_folder = 0
-            for filename in filenames:
-                total += 1
-                if os.path.splitext(filename)[-1].lower() in extensions:
-                    files.append(os.path.join(dirpath, filename)[trim:])
-                    in_folder += 1
-                else:
-                    extra.append(os.path.join(dirpath, filename)[trim:])
-            for dirname in dirnames:
-                folders.append(os.path.join(dirpath, dirname)[trim:])
-            if in_folder:
-                print(f'  {dots}{sp[-1]}: {in_folder} MP3s')
-    else:
-        for f in os.listdir(path):
-            if os.path.splitext(f)[-1].lower() in extensions:
-                files.append(os.path.join(path, f))
-                total += 1
-
-    print.quiet = False
-    return files, extra, folders
-
 def load_data(source, dest):
     if not os.path.isdir(source):
         print(f'{source} is not a folder')
@@ -936,6 +1000,37 @@ def make_folders(dest, folders):
         f = os.path.join(dest, folder)
         if not os.path.exists(f):
             os.mkdir(f)
+
+def make_playlists(data, mode, dest, min_count):
+    mode = mode[0].upper() + mode[1:]
+    where = os.path.join(dest, mode)
+    if os.path.isfile(where):
+        sg.popup_error(f'Dest {where} is a file. Aborting.', title='Error')
+        return
+    elif os.path.isdir(where):
+        if sg.popup_ok_cancel(f"Dest '{dest}' already exists. New playlists " 
+                'will overide existing files.', title='Confirm') != 'OK':
+            return
+    else:
+        os.mkdir(where)
+
+    prefix = '../'
+    print(f'Making playlists for {mode} with {min_count} or more songs')
+    print(f'Outputting to {where}')
+    count = 0
+
+    for item, songs in data.items():
+        if len(songs) >= min_count:
+            #print(f'  {item}')
+            count += 1
+            outf = os.path.join(where, item+'.m3u')
+            with open(outf, 'w') as file:
+                for s in songs:
+                    _print(prefix+s.filename,file=file)
+    if count:
+        print(f'{count} playlists created')
+    else:
+        print('None found')
 
 def pick_files(results, opts):
     missing, older, differ, same, extra = results
