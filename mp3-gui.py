@@ -384,7 +384,7 @@ def category_menu(window, mode='Artists'):
                     enable_events=True, key='MODE')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=checked.get(box, False)) for box in boxes],
-            [sg.Listbox(['Scanning...'], size=(100, 15),
+            [sg.Listbox(['Scanning...'], size=(100, 15), enable_events=True,
                     key="LIST", horizontal_scroll=True)],
             [sg.Text('Minimum Count'), sg.Input(min_count, size=5,
                     enable_events=True, key='COUNT'),
@@ -392,7 +392,7 @@ def category_menu(window, mode='Artists'):
                 sg.Button('Copy'), sg.Button('Close')] ]
     
     window = sg.Window(title, layout, modal=True, finalize=True)
-    items, indexes = list_items(source, min_count, *opts)
+    items, indexes, songs = list_items(source, min_count, *opts)
     window['LIST'].update(items)
     while True:
         event, values = window.read()
@@ -407,34 +407,63 @@ def category_menu(window, mode='Artists'):
             for f in extras:
                 s += os.path.join(dest, f) + '\n'
             pyperclip.copy(s)
-        elif event == 'Swap':
-            source, dest = dest, source
-            window['SOURCE'].update(source)
-            window['DEST'].update(dest)
-            extras = update(source, dest, opts)
         elif event in boxes:
+            if event=='Unfold Details' and values.get('Unfold Details', False):
+                window['Extra Details'].update(True)
+            elif event=='Extra Details' and not values.get('Extra Details', False):
+                window['Unfold Details'].update(False)
             opts = [values.get(k, False) for k in boxes]
-            items, indexes = list_items(source, min_count, *opts)
+            items, indexes, songs = list_items(source, min_count, *opts)
             window['LIST'].update(values=items)
         elif event == 'COUNT':
             try:
                 min_count = int(values['COUNT'])
             except:
                 continue
-            items, indexes = list_items(source, min_count, *opts)
+            items, indexes, songs = list_items(source, min_count, *opts)
             window['LIST'].update(values=items)
         elif event == 'SOURCE':
             nsource = values['SOURCE']
             if comp_dir(source, nsource, True):
                 source = options['source'] = nsource
-                items, indexes = list_items(source, min_count, *opts)
+                items, indexes, songs = list_items(source, min_count, *opts)
                 window['LIST'].update(values=items)
         elif event == 'MODE':
             title, list_items, min_count = set_mode(values['MODE'])
-            items, indexes = list_items(source, min_count, *opts)
+            items, indexes, songs = list_items(source, min_count, *opts)
             window['LIST'].update(items)
             window['COUNT'].update(min_count)
             window.set_title(title)
+        elif event == 'LIST':
+            selected = window['LIST'].GetIndexes()[0]
+            key = indexes[selected]
+            if indexes[selected]:
+                value = input_menu('Change Value', default=key)
+                if value and value != key:
+                    attr = mode.lower()[:-1] # exp: Artists -> artist
+                    print(f'Changing {attr} from {key} to {value}')
+                    for song in songs[key]:
+                        fn = os.path.join(source, song.filename)
+                        tag = ID3(fn)
+                        tag[attr] = value
+                        tag.save()
+                    items[selected] = items[selected].replace(key, value, 1)
+                    window['LIST'].update(items, set_to_index=[selected],
+                            scroll_to_index=max(selected-3, 0))
+
+
+
+def input_menu(title, default='None', text=''):
+    size = max(50, len(title), len(text))
+    layout = [[sg.Text(text)],
+              [sg.Input(default, size=size, key='INPUT')],
+              [sg.Push(), sg.Button('Cancel'), sg.Button('Okay')]]
+    window = sg.Window(title, layout, modal=True)
+    event, values = window.read()
+    window.close()
+    if event == 'Okay':
+        return values['INPUT']
+
 
 ## U T I L I T Y  F U N C T I O N S
 _print = print
@@ -710,40 +739,51 @@ def get_tags(files, path, rescan=False):
 
 def list_artists(path, min_count=1, by_count=False, details=False, unfold=False):
     ti = time.perf_counter()
-    artl = []
-    arti = []
-    if not hasattr(list_artists, 'history'):
-        list_artists.history = {}
 
     files = get_files(path, quiet=True)
     artists, albums, genres, filenames = get_tags(files, path)
 
-    outstr = {
-        (0,0): '{1} ({0} songs)',
-        (0,1): '{1} ({0} songs) - {2}',
-        (1,0): '{0:>5}{1} ({0} songs)',
-        (1,1): '{0:>5}{1} ({0} songs) - {2}'}[(by_count, details)]
-
-    for artist, info in artists.items():
-        l = len(info)
-        albums = {}
-        for song in info:
-            #fn, album = i
-            c = albums.get(song.album, 0) + 1
-            albums[song.album] = c
-
-        album_list = []
-        for k, v in albums.items():
-            album_list.append(f'{k}({v})')
-
-        if l >= min_count:
-            artl.append(outstr.format(l, artist, album_list))
-            arti.append(artist)
-    artl.sort(key=lambda x: x.lower(), reverse=by_count)
     if by_count:
-        artl = [i[5:] for i in artl]
-    print(f'Found {len(artl)} artists in {path} ({time_str(ti)})')
-    return artl, arti
+        keyer = lambda x: len(artists[x])
+        albkeyer = lambda x: len(albums[x])
+        reverse = True
+    else:
+        keyer = albkeyer = lambda x: x.lower()
+        reverse = False
+
+    acount = 0
+    artl = []
+    arti = []
+    for a in sorted(artists.keys(), key=keyer, reverse=reverse):
+        songs = artists[a]
+        scount = len(songs)
+        aalb = {}
+        for song in songs:
+            aalb[song.album] = aalb.get(song.album, 0) + 1
+
+        sstr = f'{a} ({scount} songs in {len(aalb)} albums)'
+        if scount < min_count:
+            pass
+        elif details:
+            acount += 1
+            if unfold:
+                artl.append(sstr)
+                arti.append(a)
+                for s in sorted(aalb.keys(), key=albkeyer, reverse=reverse):
+                    artl.append(f'    {s} ({len(albums[s])})')
+                    arti.append(None)
+            else:
+                sstr += ' - ' 
+                for s in sorted(aalb.keys(), key=albkeyer, reverse=reverse):
+                    sstr += f'{s} ({len(albums[s])}), '
+                artl.append(sstr[:-2])
+                arti.append(a)
+        else:
+            acount += 1
+            artl.append(sstr)
+            arti.append(a)
+    print(f'found {acount} artists in {path} ({time_str(ti)})')
+    return artl, arti, artists
 
 def list_albums(path, min_count=1, by_count=False, details=False, unfold=False):
     def keyer(i):
@@ -754,23 +794,33 @@ def list_albums(path, min_count=1, by_count=False, details=False, unfold=False):
     artists, albums, genres, filenames = get_tags(files, path)
 
     if by_count:
-        album_list = sorted([(a,len(c)) for a, c in albums.items()
+        album_list = sorted([(a,len(c), c[0].artist) for a, c in albums.items()
                 if len(c) >= min_count], key=keyer)
     else:
-        album_list = sorted([(a,len(c)) for a, c in albums.items()
+        album_list = sorted([(a,len(c), c[0].artist) for a, c in albums.items()
                 if len(c) >= min_count], key=lambda x: x[0].lower())
 
     albl = []
     albi = []
-    for a, c in album_list:
-        s = (f'{a} ({c})')
+    for a, c, art in album_list:
+        s = (f'{a} ({c} songs by {art})')
         if details:
-            d = ', '.join([a.title for a in albums[a]])
-            s += f' - {d}'
-        albl.append(s)
-        albi.append(a)
+            if unfold:
+                albl.append(s)
+                albi.append(a)
+                for a in sorted(albums[a], key=lambda x: x.title.lower()):
+                    albl.append('    '+a.title)
+                    albi.append(None)
+            else:
+                d = ', '.join(sorted([a.title for a in albums[a]], key=lambda x: x.lower()))
+                s += f' - {d}'
+                albl.append(s)
+                albi.append(a)
+        else:
+            albl.append(s)
+            albi.append(a)
     print(f'found {len(album_list)} albums in {path} ({time_str(ti)})')
-    return albl, albi
+    return albl, albi, albums
 
 def list_genres(path, min_count=1, by_count=False, details=False, unfold=False):
     def keyer(i):
@@ -804,21 +854,26 @@ def list_genres(path, min_count=1, by_count=False, details=False, unfold=False):
             pass
         elif details:
             gcount += 1
+            items = sorted([k for k, v in gart.items() if v >= min_count],
+                    key=akeyer, reverse=reverse)
             if unfold:
                 glist.append(gstr)
-                for k in sorted(gart.keys(), key=akeyer, reverse=reverse):
-                    glist.append(f'    {k} ({gart[k]})')
+                gindex.append(g)
+                for i in items:
+                    glist.append(f'    {i} ({gart[i]})')
                     gindex.append(None)
             else:
-                gstr += ' - ' + ', '.join([f'{k}({v})' for k, v in gart.items() if v >= min_count])
-                glist.append(gstr)
+                gstr += ' - '  
+                for i in items:
+                    gstr += f'{i} ({gart[i]}), '
+                glist.append(gstr[:-2])
                 gindex.append(g)
         else:
             gcount += 1
             glist.append(gstr)
             gindex.append(g)
     print(f'found {gcount} genres in {path} ({time_str(ti)})')
-    return glist, gindex
+    return glist, gindex, genres
 
 
 
