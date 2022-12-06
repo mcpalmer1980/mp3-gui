@@ -19,12 +19,12 @@ tooltips = {
     'Sync to Dest': 'Sync MP3s from source to dest folder',
     'Clean Dest': 'Remove files from dest missing in source folder',
     'Verify Filenames': 'Check for and fix mangled filenames',
-    'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
-    'Albums': 'Show all albums with song counts in source folder',
-    'Genres': 'Show all genres',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
     'Browser': 'Make playlists for albums with x songs or more',
     'Fix Playlist': 'Normalize playlist for root folder and remove extra lines',
+    'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
+    'Albums': 'Show all albums with song counts in source folder',
+    'Genres': 'Show all genres',
     'Change Theme': 'Change GUI colors and font size' }
 tools = list(tooltips.keys())
 themes = sg.theme_list()
@@ -380,11 +380,12 @@ def category_menu(window, mode='Artists'):
     opts = [checked.get(k, False) for k in boxes]
     title, list_items, min_count = set_mode(mode)
 
-    layout = [[sg.Text('Source', size=10),
+    layout = [[sg.Text('Source', size=15),
                 sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT"),
                 sg.Push(), sg.Combo(modes, default_value=mode, readonly=True,
                     enable_events=True, key='MODE')],
+            [sg.Text('Export Subfolder', size=15), sg.In(mode, size=(50,1), key='DEST')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=checked.get(box, False)) for box in boxes],
             [sg.Listbox(['Scanning...'], size=(100, 15), enable_events=True,
@@ -411,7 +412,7 @@ def category_menu(window, mode='Artists'):
                 s += os.path.join(dest, f) + '\n'
             pyperclip.copy(s)
         elif event == 'Make Playlists':
-            make_playlist(songs, mode, source, min_count)
+            make_playlists(songs, mode, source, min_count, values['DEST'])
         elif event in boxes:
             if event=='Unfold Details' and values.get('Unfold Details', False):
                 window['Extra Details'].update(True)
@@ -434,10 +435,14 @@ def category_menu(window, mode='Artists'):
                 items, indexes, songs = list_items(source, min_count, *opts)
                 window['LIST'].update(values=items)
         elif event == 'MODE':
-            title, list_items, min_count = set_mode(values['MODE'])
+            new_mode = values['MODE']
+            title, list_items, min_count = set_mode(new_mode)
             items, indexes, songs = list_items(source, min_count, *opts)
             window['LIST'].update(items)
             window['COUNT'].update(min_count)
+            old = window['DEST'].get()
+            window['DEST'].update(old.replace(mode, new_mode))
+            mode = new_mode
             window.set_title(title)
         elif event == 'LIST':
             selected = window['LIST'].GetIndexes()[0]
@@ -1001,9 +1006,9 @@ def make_folders(dest, folders):
         if not os.path.exists(f):
             os.mkdir(f)
 
-def make_playlists(data, mode, dest, min_count):
+def make_playlists(data, mode, dest, min_count, subfolder):
     mode = mode[0].upper() + mode[1:]
-    where = os.path.join(dest, mode)
+    where = os.path.join(dest, subfolder or mode)
     if os.path.isfile(where):
         sg.popup_error(f'Dest {where} is a file. Aborting.', title='Error')
         return
@@ -1012,9 +1017,9 @@ def make_playlists(data, mode, dest, min_count):
                 'will overide existing files.', title='Confirm') != 'OK':
             return
     else:
-        os.mkdir(where)
+        os.makedirs(where)
 
-    prefix = '../'
+    prefix = '../' * max(subfolder.count(os.sep)+1, 1)
     print(f'Making playlists for {mode} with {min_count} or more songs')
     print(f'Outputting to {where}')
     count = 0
