@@ -1,7 +1,7 @@
 #!bin/python
 '''
 TODO:
-update initial folder in sync window when text changes
+replace 'default' theme with no theme() call
 
 '''
 import os, sys, pickle, time, pyperclip, zlib, textwrap
@@ -52,6 +52,8 @@ def main():
             clean_menu(window)
         elif event == 'Verify Filenames':
             verify_menu(window)
+        elif event == "Fix Playlist":
+            fix_playlist_menu(window)
         elif event == 'Artists':
             category_menu(window, 'Artists')
         elif event == 'Albums':
@@ -106,7 +108,7 @@ def theme_menu(parent, theme=None):
  
     window = sg.Window("Theme Chooser", layout, modal=True,
             font=options['font'], finalize=True)
-    sg.theme(options['theme'])
+    sg.theme(options.get('theme', ''))
 
     if theme in themes:
         i = themes.index(theme)
@@ -463,6 +465,10 @@ def category_menu(window, mode='Artists'):
                             scroll_to_index=max(selected-3, 0))
 
 def extra_menu(parent):
+    def get_extras(path):
+        files, extras, folders = get_files(path, quiet=True)
+        return sorted(extras, key=lambda x:x.lower())
+
     source = options['source']
     boxes = ['Filter Same Folder', 'Filter Same Exts']
     opts = {k :False for k in boxes}
@@ -511,34 +517,98 @@ def extra_menu(parent):
                     os.remove(os.path.join(source, f))
                 print(f'Deleted {len(files)} files from {source}')
                 break
-
     window.close()
 
-def get_extras(path):
-    files, extras, folders = get_files(path, quiet=True)
-    return sorted(extras, key=lambda x:x.lower())
+def fix_playlist_menu(parent):
+    source = options['source']
+    boxes = ['Remove Metadata', 'Remove Missing']
+    playlist = None
+    opts = {k :False for k in boxes}
+    file_types=(('Playlists', '.m3u'),)
+    print('Fixing playlists')
 
-def remove_extras(files, clicked, opts, window):
-    sel = files.index(clicked)
-    if opts['Filter Same Folder']:
-        folder = os.path.split(clicked)[0]
-        for i, f in enumerate(reversed(files)):
-            if os.path.split(f)[0] == folder:
-                sel = i
-                files.remove(f)
-        sel = len(files) - sel
-    elif opts['Filter Same Exts']:
-        ext = os.path.splitext(clicked)[1]
-        for i, f in enumerate(reversed(files)):
-            if os.path.splitext(f)[1] == ext:
-                sel = i
-                files.remove(f)
-        sel = len(files) - sel
-    elif clicked in files:
-        files.remove(clicked)
-    window['LIST'].update(values=files or ['Nothing found'],
-            scroll_to_index=max(sel-2, 0))
+    layout = [[sg.Text('Playlist', size=15),
+                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.FileBrowse(initial_folder=source, key="SBUT",
+                    file_types=file_types)],
+            [sg.Text('Strip', size=15), sg.In(size=(50,1), key='STRIP')],
+            [sg.Text('Prefix', size=15), sg.In(size=(50,1), key='PREFIX')],
+            [sg.Checkbox(box, key=box, enable_events=True,
+                default=opts.get(box, False)) for box in boxes],
+            [sg.Listbox(['Load a Playlist'], size=(100, 15), enable_events=True,
+                    key="LIST")],
+            [sg.Push(), sg.Button('Save', disabled=True),
+                    sg.Button('Show', disabled=True), sg.Button('Close')] ]
+    window = sg.Window('Extra File Browser', layout, modal=True, finalize=True)
 
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Close'):
+            break
+        elif event in boxes:
+            opts = {box: values[box] for box in boxes}
+            if playlist:
+                files, strip, prefix = scan_playlist(playlist, opts, window)
+        elif event == 'LIST':
+            item = values[event][0]
+        elif event == 'SOURCE':
+            if os.path.isfile(values[event]):
+                playlist = values[event]
+                files, strip, prefix = scan_playlist(values[event], opts, window)
+        elif event == 'Show':
+            if window[event].get_text() == 'Show':
+                prefix = window['PREFIX'].get()
+                window['Show'].update('Reset')
+                l = len(values['STRIP'])
+                outp = [prefix+f[l:] for f in files if f[0]!='#']
+                window['LIST'].update(outp)
+            else:
+                window['Show'].update('Show')
+                window['LIST'].update(files)
+        elif event == 'Save':
+            p = os.path.split(window['SOURCE'].get())[0]
+            path = p if os.path.isdir(p) else options['dest']
+            prefix = window['PREFIX'].get()
+            l = len(values['STRIP'])
+            fn = sg.popup_get_file('Save Playlist', save_as=True,
+                    default_path=path, default_extension='.m3u',
+                    file_types=file_types)
+            print(fn)
+            with open(fn, 'w') as outp:
+                for f in files:
+                    if f[0] != '#':
+                        f = prefix+f[l:]
+                    _print(f, file=outp)
+    window.close()
+
+def scan_playlist(source, opts, window):
+    try:
+        file = open(source)
+        lines = file.readlines()
+        file.close()
+    except:
+        files = []
+        print(f'Failed to open playlist: {source}')
+    print(f'Scanning playlist: {source}')
+    print(opts)
+
+    files = [f.strip('\n') for f in lines if f[0] != '#']
+    if opts['Remove Metadata']:
+        lines = files
+    else:
+        lines = [f.strip('\n') for f in lines]
+    if opts['Remove Missing']:
+        lines = [f for f in lines if f[0]=='#' or os.path.isfile(f)]
+
+    strip = os.path.commonpath(files) + os.sep
+    prefix = '../'
+    window['LIST'].update(lines)
+    window['STRIP'].update(strip)
+    window['PREFIX'].update(prefix)
+    window['Save'].update(disabled=False)
+    window['Show'].update(disabled=False)
+
+    return lines, strip, prefix
 
 def input_menu(title, default='None', text=''):
     size = max(50, len(title), len(text))
@@ -607,7 +677,6 @@ def browser(path, types=None):
             clicked = values[event][0]
             if clicked.startswith('/'):
                 p = os.path.join(path, values[event][0][1:])
-                print(path, values[event][0], p)
                 if os.path.isdir(p):
                     path = p
                     items, parents = get_listing(path, window)
@@ -647,10 +716,14 @@ def load_options(path=None):
         load_options.options = options.copy()
     except:
         load_options.options = None
+        user = os.path.expanduser('~')
+        music = os.path.join(user, 'Music')
+        source = music if os.path.exists(music) else user 
         options = dict(
-            source = '/home/michael/Music',
-            dest = '/tmp/music_out',
-            font = ('Arial', 16))
+            theme = 'default',
+            source = source,
+            dest = os.path.join(user, 'output'),
+            font = ('Arial', 14))
         print('Failed to load options: setting default')
     print(f'  {options}')
     if options.get('theme', None) in themes:
@@ -1129,6 +1202,26 @@ def pick_files(results, opts):
         which += extra
     return which
 
+def remove_extras(files, clicked, opts, window):
+    sel = files.index(clicked)
+    if opts['Filter Same Folder']:
+        folder = os.path.split(clicked)[0]
+        for i, f in enumerate(reversed(files)):
+            if os.path.split(f)[0] == folder:
+                sel = i
+                files.remove(f)
+        sel = len(files) - sel
+    elif opts['Filter Same Exts']:
+        ext = os.path.splitext(clicked)[1]
+        for i, f in enumerate(reversed(files)):
+            if os.path.splitext(f)[1] == ext:
+                sel = i
+                files.remove(f)
+        sel = len(files) - sel
+    elif clicked in files:
+        files.remove(clicked)
+    window['LIST'].update(values=files or ['Nothing found'],
+            scroll_to_index=max(sel-2, 0))
 
 if __name__ == '__main__':
     main()
