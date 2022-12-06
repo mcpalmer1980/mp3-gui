@@ -20,8 +20,8 @@ tooltips = {
     'Clean Dest': 'Remove files from dest missing in source folder',
     'Verify Filenames': 'Check for and fix mangled filenames',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
-    'Browser': 'Make playlists for albums with x songs or more',
     'Fix Playlist': 'Normalize playlist for root folder and remove extra lines',
+    'Browser': 'Make playlists for albums with x songs or more',
     'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
     'Albums': 'Show all albums with song counts in source folder',
     'Genres': 'Show all genres',
@@ -60,6 +60,8 @@ def main():
             category_menu(window, 'Genres')
         elif event == 'Browser':
             browser('/home/michael')
+        elif event == 'Show non-MP3s':
+            extra_menu(window)
         elif event == 'Copy':
             pyperclip.copy(print.buffer.getvalue())
         else:
@@ -312,7 +314,6 @@ def clean_menu(source='', dest=''):
                 extras.remove(item)
                 window['LIST'].update(values=extras or ['Nothing found'],
                         scroll_to_index=max(i-2, 0))
-            print(f'{event}: {values[event]}')
         else:
             print(f'{event} {values}')
 
@@ -460,6 +461,83 @@ def category_menu(window, mode='Artists'):
                     items[selected] = items[selected].replace(key, value, 1)
                     window['LIST'].update(items, set_to_index=[selected],
                             scroll_to_index=max(selected-3, 0))
+
+def extra_menu(parent):
+    source = options['source']
+    boxes = ['Filter Same Folder', 'Filter Same Exts']
+    opts = {k :False for k in boxes}
+    tooltips = {
+        'LIST': 'Click items to filter it or similar items from list'    }
+    print('Showing non-MP3 files')
+
+    layout = [[sg.Text('Source', size=15),
+                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.FolderBrowse(initial_folder=source, key="SBUT")],
+            [sg.Checkbox(box, key=box, enable_events=True,
+                default=opts.get(box, False)) for box in boxes],
+            [sg.Listbox(['Scanning...'], size=(100, 15), enable_events=True,
+                    key="LIST", tooltip=tooltips['LIST'])],
+            [sg.Push(), sg.Button('Reset'), sg.Button('Remove'), sg.Button('Close')] ]
+    window = sg.Window('Extra File Browser', layout, modal=True, finalize=True)
+    files = get_extras(source)
+    window['LIST'].update(files)
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Close'):
+            break
+        elif event in boxes:
+            if values[event]:
+                for i in boxes:
+                    window[i].update(False)
+                    opts[i] = False
+                window[event].update(True)
+            opts = {k :window[k].get() for k in boxes}
+        elif event == 'LIST':
+            item = values[event][0]
+            remove_extras(files, item, opts, window)
+        elif event == 'SOURCE':
+            if os.path.isdir(values[event]):
+                source = os.path.normpath(values[event])
+                files = get_extras(source)
+                window['LIST'].update(files)
+                options['source'] = source
+        elif event == 'Reset':
+            files = get_extras(source)
+            window['LIST'].update(files)
+        elif event == 'Remove':
+            r = sg.popup_ok_cancel(f'Delete {len(files)} files from {source}?', title='Delete')
+            if r == 'OK':
+                for f in files:
+                    os.remove(os.path.join(source, f))
+                print(f'Deleted {len(files)} files from {source}')
+                break
+
+    window.close()
+
+def get_extras(path):
+    files, extras, folders = get_files(path, quiet=True)
+    return sorted(extras, key=lambda x:x.lower())
+
+def remove_extras(files, clicked, opts, window):
+    sel = files.index(clicked)
+    if opts['Filter Same Folder']:
+        folder = os.path.split(clicked)[0]
+        for i, f in enumerate(reversed(files)):
+            if os.path.split(f)[0] == folder:
+                sel = i
+                files.remove(f)
+        sel = len(files) - sel
+    elif opts['Filter Same Exts']:
+        ext = os.path.splitext(clicked)[1]
+        for i, f in enumerate(reversed(files)):
+            if os.path.splitext(f)[1] == ext:
+                sel = i
+                files.remove(f)
+        sel = len(files) - sel
+    elif clicked in files:
+        files.remove(clicked)
+    window['LIST'].update(values=files or ['Nothing found'],
+            scroll_to_index=max(sel-2, 0))
 
 
 def input_menu(title, default='None', text=''):
