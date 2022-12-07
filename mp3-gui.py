@@ -21,6 +21,7 @@ tooltips = {
     'Verify Filenames': 'Check for and fix mangled filenames',
     'Show non-MP3s': 'Show/Delete non-MP3 files in source folder',
     'Fix Playlist': 'Normalize playlist for root folder and remove extra lines',
+    'Verify': 'Nothing here yet',
     'Browser': 'Make playlists for albums with x songs or more',
     'Artists': 'Show all artists in source folder (for fixing misspellings etc)',
     'Albums': 'Show all albums with song counts in source folder',
@@ -60,6 +61,8 @@ def main():
             category_menu(window, 'Albums')
         elif event == 'Genres':
             category_menu(window, 'Genres')
+        elif event == 'Verify':
+            filename_menu(window)
         elif event == 'Browser':
             browser('/home/michael')
         elif event == 'Show non-MP3s':
@@ -324,15 +327,12 @@ def verify_menu(window):
     print('Opening filename menu')
     boxes = ('MP3s', 'Other')
 
-
-    files = get_files(source, quiet=True)[0]
-    items = check_filenames(files)
     layout = [[sg.Text('Source', size=10),
                 sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT")],
-            [sg.Listbox(items, size=(100, 15),
+            [sg.Listbox(['Nothing Scanned'], size=(100, 15),
                     key="LIST")],
-            [sg.Push(), sg.Button('Copy'), sg.Button('Close')] ]
+            [sg.Push(), sg.Button('Copy'), sg.Button('Scan'), sg.Button('Close')] ]
     
     window = sg.Window('Verify Filenames', layout, modal=True, finalize=True)
 
@@ -356,13 +356,11 @@ def verify_menu(window):
             extras = update(source, dest, opts)
         elif event in boxes:
             extras = update(source, dest, opts)
-        elif event == 'SOURCE':
-            nsource = values['SOURCE']
-            if comp_dir(source, nsource, True):
-                source = options['source'] = nsource
-                files = get_files(source, quiet=True)[0]
-                items = check_filenames(files)
-                window['LIST'].update(values=items)
+        elif event == 'Scan':
+            source = options['source'] = values['SOURCE']
+            files = get_files(source, quiet=True)[0]
+            items = check_filenames(files)
+            window['LIST'].update(values=items)
 
 def category_menu(window, mode='Artists'):
     def set_mode(mode):
@@ -519,6 +517,7 @@ def extra_menu(parent):
                 break
     window.close()
 
+
 def fix_playlist_menu(parent):
     source = options['source']
     boxes = ['Remove Metadata', 'Remove Missing']
@@ -581,34 +580,104 @@ def fix_playlist_menu(parent):
                     _print(f, file=outp)
     window.close()
 
-def scan_playlist(source, opts, window):
-    try:
-        file = open(source)
-        lines = file.readlines()
-        file.close()
-    except:
-        files = []
-        print(f'Failed to open playlist: {source}')
-    print(f'Scanning playlist: {source}')
-    print(opts)
 
-    files = [f.strip('\n') for f in lines if f[0] != '#']
-    if opts['Remove Metadata']:
-        lines = files
-    else:
-        lines = [f.strip('\n') for f in lines]
-    if opts['Remove Missing']:
-        lines = [f for f in lines if f[0]=='#' or os.path.isfile(f)]
+def filename_menu(parent):
+    source = options['source']
+    boxes = ['Include Folder', 'Option 2']
+    opts = {k :False for k in boxes}
+    print('Checking Filenames')
+    match = '{genre}/{artist} - {title}'
+    wrong = None
 
-    strip = os.path.commonpath(files) + os.sep
-    prefix = '../'
-    window['LIST'].update(lines)
-    window['STRIP'].update(strip)
-    window['PREFIX'].update(prefix)
-    window['Save'].update(disabled=False)
-    window['Show'].update(disabled=False)
+    layout = [[sg.Text('Source', size=15),
+                sg.In(source, size=(50,1), key='SOURCE'),
+                sg.FileBrowse(initial_folder=source, key="SBUT",)],
+            [sg.Text('Match', size=15), sg.In(match, size=(50,1), key='MATCH')],
+            [sg.Checkbox(box, key=box, enable_events=True,
+                default=opts.get(box, False)) for box in boxes],
+            [sg.Listbox(['Nothing Found'], size=(100, 15), enable_events=True,
+                    key="LIST")],
+            [sg.Push(), sg.Button('Scan'), sg.Button('Close')] ]
+    window = sg.Window('Verify Filenames', layout, modal=True, finalize=True)
 
-    return lines, strip, prefix
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Close'):
+            break
+        elif event in boxes:
+            opts = {box: values[box] for box in boxes}
+        elif event == 'LIST':
+            item = values[event][0]
+            fn, expected = item.split(' || ')
+            edit_file(fn, tags, source, expected)
+        elif event == 'SOURCE':
+            if os.path.isdir(values[event]):
+                source = values['SOURCE']
+                options['source'] = source
+        elif event == 'Scan':
+            match = values['MATCH']
+            wrong, tags = verify_filenames(source, match, opts)
+            window['LIST'].update(wrong or ['Nothing Found'])   
+
+    window.close()
+
+def edit_file(fn, tags, dest, match):
+    def get_match_str(match, tag):
+        return match.format(
+            title=tag.title,
+            artist=tag.artist,
+            album=tag.album,
+            genre=tag.genre)
+
+    size = 10
+    tags = tags[fn]
+    expected = get_match_str(match, tags)
+    layout = [[sg.Text('Expected', size=size), sg.Text(expected)]]
+
+    items = ('Filename', 'Title', 'Artist', 'Album', 'Genre')
+    layout += [ [sg.Text(i, size=size), sg.In(
+                getattr(tags, i.lower()), key=i)] for i in items]
+    layout += [[sg.Push(), sg.Button('Cancel'), sg.Button('Save')]]
+
+    window = sg.Window('Edit Song Details', layout, modal=True)
+    event, values = window.read()
+    if event == 'Save':
+        pass
+    
+    window.close()
+
+
+def verify_filenames(source, match, opts):
+    files = get_files(source, quiet=True)[0]
+    artists, albums, genres, filenames = get_tags(files, source)
+    if not match.endswith('.mp3'):
+        match += '.mp3'
+
+
+    #max_length = 80
+    #trim = max_length - len('Scanning   ')
+    ti = time.perf_counter()
+    total = len(files)
+    wrong = []
+    for i, f in enumerate(files):
+        '''
+        if not sg.one_line_progress_meter('Comparing Files', i+1, total, 
+                f'Comparing Files in {source}', f'Scanning {f[-trim:]}',
+                orientation='h', no_titlebar=False, size = (max_length, 3), grab_anywhere=False,
+                bar_color=('white', 'red'), keep_on_top=False):
+            print(f'Canceled sync after {time_str(ti)} at file {f}')
+            return'''
+
+        m = match.format(
+            title=filenames[f].title,
+            artist=filenames[f].artist,
+            album=filenames[f].album,
+            genre=filenames[f].genre)
+        if f != m:
+            wrong.append(f'{f} || {m}')
+    print(f'Compared {total} in {source} ({time_str(ti)})')
+    return wrong, filenames
+
 
 def input_menu(title, default='None', text=''):
     size = max(50, len(title), len(text))
@@ -765,7 +834,7 @@ def get_CRC(fpath):
 def comp_dir(d1, d2, check_exist=False):
     d1 = os.path.normpath(d1)
     d2 = os.path.normpath(d2)
-    r = d1 == d2
+    r = d1 == d2 or (d1 == '/' or d2 == '/')
     exists = os.path.isdir(d1) and os.path.isdir(d2)
     #print(f'1: {d1}, 2: {d2}, equal: {r}, exists: {exists}')
     return exists and not r
@@ -971,8 +1040,7 @@ def get_tags(files, path, rescan=False):
 
     ti = time.perf_counter()
     filenames = {}; artists = {}; albums = {}; genres = {}
-    for f in files[0]:
-        #print(f)
+    for f in files:
         id3 = ID3(os.path.join(path, f))
         artist = id3.get('Artist', [None,])[0]
         tags = SongTag(
@@ -999,7 +1067,7 @@ def get_tags(files, path, rescan=False):
 def list_artists(path, min_count=1, by_count=False, details=False, unfold=False):
     ti = time.perf_counter()
 
-    files = get_files(path, quiet=True)
+    files = get_files(path, quiet=True)[0]
     artists, albums, genres, filenames = get_tags(files, path)
 
     if by_count:
@@ -1049,7 +1117,7 @@ def list_albums(path, min_count=1, by_count=False, details=False, unfold=False):
         return f'{1000-i[1]}{i[0]}'
     ti = time.perf_counter()
 
-    files = get_files(path, quiet=True)
+    files = get_files(path, quiet=True)[0]
     artists, albums, genres, filenames = get_tags(files, path)
 
     if by_count:
@@ -1086,7 +1154,7 @@ def list_genres(path, min_count=1, by_count=False, details=False, unfold=False):
         return f'{1000-i[1]}{i[0]}'
     ti = time.perf_counter()
 
-    files = get_files(path, quiet=True)
+    files = get_files(path, quiet=True)[0]
     artists, albums, genres, filenames = get_tags(files, path)
 
     if by_count:
@@ -1222,6 +1290,36 @@ def remove_extras(files, clicked, opts, window):
         files.remove(clicked)
     window['LIST'].update(values=files or ['Nothing found'],
             scroll_to_index=max(sel-2, 0))
+
+
+def scan_playlist(source, opts, window):
+    try:
+        file = open(source)
+        lines = file.readlines()
+        file.close()
+    except:
+        files = []
+        print(f'Failed to open playlist: {source}')
+    print(f'Scanning playlist: {source}')
+    print(opts)
+
+    files = [f.strip('\n') for f in lines if f[0] != '#']
+    if opts['Remove Metadata']:
+        lines = files
+    else:
+        lines = [f.strip('\n') for f in lines]
+    if opts['Remove Missing']:
+        lines = [f for f in lines if f[0]=='#' or os.path.isfile(f)]
+
+    strip = os.path.commonpath(files) + os.sep
+    prefix = '../'
+    window['LIST'].update(lines)
+    window['STRIP'].update(strip)
+    window['PREFIX'].update(prefix)
+    window['Save'].update(disabled=False)
+    window['Show'].update(disabled=False)
+
+    return lines, strip, prefix
 
 if __name__ == '__main__':
     main()
