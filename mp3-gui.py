@@ -93,7 +93,8 @@ def main_window(theme='DarkBlack1', size=16):
               [sg.Multiline(default_text=print.buffer.getvalue(),
                     enable_events=False, size=(120, 20),
                     key="CONSOLE", write_only=True, disabled=True, autoscroll=True)],
-              [sg.Push(), sg.Button('Clear'), sg.Button('Copy'), sg.Button('Save')] ]
+              [sg.Push(), sg.Text('History:'), sg.Button('Clear'), sg.Button('Copy'),
+                    sg.Button('Save')] ]
     return sg.Window('MP3 Gui', layout, font=options['font'], icon=icon, finalize=True)
 
 def theme_menu(parent, theme=None):
@@ -397,7 +398,7 @@ def category_menu(window, mode='Artists'):
                 sg.Button('Copy'), sg.Button('Close')] ]
     
     window = sg.Window(title, layout, modal=True, finalize=True)
-    items, indexes, songs = list_items(source, min_count, *opts)
+    items, indexes, songs = list_items(source, min_count, rescan=True, *opts)
     window['LIST'].update(items)
     while True:
         event, values = window.read()
@@ -583,7 +584,7 @@ def fix_playlist_menu(parent):
 
 def filename_menu(parent):
     source = options['source']
-    boxes = ['Include Folder', 'Option 2']
+    boxes = ['Ignore Folders', 'Option 2']
     opts = {k :False for k in boxes}
     print('Checking Filenames')
     match = '{genre}/{artist} - {title}'
@@ -608,75 +609,130 @@ def filename_menu(parent):
             opts = {box: values[box] for box in boxes}
         elif event == 'LIST':
             item = values[event][0]
-            fn, expected = item.split(' || ')
-            edit_file(fn, tags, source, expected)
-        elif event == 'SOURCE':
-            if os.path.isdir(values[event]):
+            expected = item.split(' || ')[1]
+            i = window[event].get_indexes()[0]
+            fn = indexes[i]
+            if edit_file(fn, tags, source, match):
+                wrong.pop(i); indexes.pop(i)
+                window['LIST'].update(wrong, scroll_to_index=i-2)
+
+        elif event == 'Scan':
+            if os.path.isdir(values['SOURCE']):
                 source = values['SOURCE']
                 options['source'] = source
-        elif event == 'Scan':
+            else:
+                window['SOURCE'].update(source)
+                continue
             match = values['MATCH']
-            wrong, tags = verify_filenames(source, match, opts)
+            wrong, tags, indexes = verify_filenames(source, match, opts)
             window['LIST'].update(wrong or ['Nothing Found'])   
 
     window.close()
 
 def edit_file(fn, tags, dest, match):
-    def get_match_str(match, tag):
+    def get_match_str(tags, match):
         return match.format(
-            title=tag.title,
-            artist=tag.artist,
-            album=tag.album,
-            genre=tag.genre)
+            title=tags.title,
+            artist=tags.artist,
+            album=tags.album,
+            genre=tags.genre)
 
-    size = 10
-    tags = tags[fn]
-    expected = get_match_str(match, tags)
-    layout = [[sg.Text('Expected', size=size), sg.Text(expected)]]
+    size = 8, 60
+    orig, all_tags = tags[fn], tags
+    tags = orig.copy()
+    match = match if match.endswith('.mp3') else match + '.mp3'
+    expected = get_match_str(tags, match)
+    layout = [[sg.Text('Expected', size=size[0], key='MTEXT'), sg.Text(expected, key='MATCH')]]
 
     items = ('Filename', 'Title', 'Artist', 'Album', 'Genre')
-    layout += [ [sg.Text(i, size=size), sg.In(
-                getattr(tags, i.lower()), key=i)] for i in items]
-    layout += [[sg.Push(), sg.Button('Cancel'), sg.Button('Save')]]
+    layout += [ [sg.Text(i, size=size[0]), sg.In(getattr(tags, i.lower()), size=size[1],
+                key=i, enable_events=True)] for i in items]
+    layout += [[sg.Button('Rename'), sg.Button('Re-tag')],
+               [sg.Push(), sg.Button('Cancel'), sg.Button('Save')]]
 
     window = sg.Window('Edit Song Details', layout, modal=True)
-    event, values = window.read()
-    if event == 'Save':
-        pass
-    
-    window.close()
+    while True:
+        event, values = window.read()
+        if event in (sg.WIN_CLOSED, 'Cancel'):
+            window.close()
+            return
+        elif event == 'Save':
+            fn = os.path.join(dest, orig.filename)
+            newfn = os.path.join(dest, tags.filename)
+            ntags = ID3(fn)
+            ntags['title'] = orig.title = tags.title
+            ntags['artist'] = orig.title = tags.artist
+            ntags['album'] = orig.title = tags.album
+            ntags['genre'] = orig.title = tags.genre
+            ntags.save()
+            orig.filename = newfn
+            all_tags[newfn] = orig
 
+            if orig.filename != tags.filename:
+                os.rename(fn, newfn)
+            break
+        elif event == 'Rename':
+            tags.filename = get_match_str(tags, match)
+            window['Filename'].update(tags.filename)
+        elif event == 'Re-tag':
+            tags_from_fn(match, tags.filename, tags, window)
+            
+        elif event in items:
+            tags.__setattr__(event.lower(), values[event])
+            m = get_match_str(tags, match)
+            window['MATCH'].update(m)
+            if m == tags.filename:
+                window['MTEXT'].update('Match')
+            else:
+                window['MTEXT'].update('Expected')
+   
+    window.close()
+    return get_match_str(tags, match) == tags.filename
+
+def tags_from_fn(match, text, tags, window):
+    parts = []; d = {}
+    items = match.split('{')
+    if not items: return
+    for s in items:
+        r = s.split('}')
+        if len(r) > 1:
+            key, token, *_ = r
+            parts.append((key, token))
+    for key, token in parts:
+        if token:
+            r = text.split(token, 1)
+            if not r or len(r) != 2: return
+            item, text = r
+        else:
+            item = text
+        d[key] = item
+    if len(parts) == len(d):
+        for k, v in d.items():
+            tags.__setattr__(k, v)
+            window[k[0].upper()+k[1:]].update(v)
 
 def verify_filenames(source, match, opts):
     files = get_files(source, quiet=True)[0]
-    artists, albums, genres, filenames = get_tags(files, source)
+    artists, albums, genres, filenames = get_tags(files, source, True)
     if not match.endswith('.mp3'):
         match += '.mp3'
 
-
-    #max_length = 80
-    #trim = max_length - len('Scanning   ')
     ti = time.perf_counter()
     total = len(files)
     wrong = []
-    for i, f in enumerate(files):
-        '''
-        if not sg.one_line_progress_meter('Comparing Files', i+1, total, 
-                f'Comparing Files in {source}', f'Scanning {f[-trim:]}',
-                orientation='h', no_titlebar=False, size = (max_length, 3), grab_anywhere=False,
-                bar_color=('white', 'red'), keep_on_top=False):
-            print(f'Canceled sync after {time_str(ti)} at file {f}')
-            return'''
-
+    indexes = []
+    for i, fn in enumerate(files):
+        f = os.path.split(fn)[1] if opts['Ignore Folders'] else fn
         m = match.format(
-            title=filenames[f].title,
-            artist=filenames[f].artist,
-            album=filenames[f].album,
-            genre=filenames[f].genre)
+            title=filenames[fn].title,
+            artist=filenames[fn].artist,
+            album=filenames[fn].album,
+            genre=filenames[fn].genre)
         if f != m:
             wrong.append(f'{f} || {m}')
-    print(f'Compared {total} in {source} ({time_str(ti)})')
-    return wrong, filenames
+            indexes.append(fn)
+    print(f'Compared {total} files in {source} ({time_str(ti)})')
+    return wrong, filenames, indexes
 
 
 def input_menu(title, default='None', text=''):
@@ -1027,7 +1083,18 @@ def get_tags(files, path, rescan=False):
             self.album = album
             self.genre = genre
         def __repr__(self):
-            return f'SongTags ({self.title}, {self.artist}, {self.album}, {self.genre})'
+            return f'SongTags ({self.title}, {self.artist}, ' \
+                    f'{self.album}, {self.genre})'
+        def __eq__(self, other):
+            if isinstance(other, SongTag):
+                if (self.filename==other.filename and
+                    self.title==other.title and self.artist==other.artist
+                    and self.album==other.album and self.genre==other.genre):
+                        return True
+            return False
+        def copy(self):
+            return SongTag(self.filename, self.title, self.artist,
+                    self.album, self.genre)
 
     if not hasattr(get_tags, 'history'):
         get_tags.history = {}
@@ -1064,11 +1131,11 @@ def get_tags(files, path, rescan=False):
     get_tags.history[path] = artists, albums, genres, filenames
     return get_tags.history[path]
 
-def list_artists(path, min_count=1, by_count=False, details=False, unfold=False):
+def list_artists(path, min_count=1, by_count=False, details=False, unfold=False, rescan=False):
     ti = time.perf_counter()
 
     files = get_files(path, quiet=True)[0]
-    artists, albums, genres, filenames = get_tags(files, path)
+    artists, albums, genres, filenames = get_tags(files, path, rescan)
 
     if by_count:
         keyer = lambda x: len(artists[x])
@@ -1112,13 +1179,13 @@ def list_artists(path, min_count=1, by_count=False, details=False, unfold=False)
     print(f'found {acount} artists in {path} ({time_str(ti)})')
     return artl, arti, artists
 
-def list_albums(path, min_count=1, by_count=False, details=False, unfold=False):
+def list_albums(path, min_count=1, by_count=False, details=False, unfold=False, rescan=False):
     def keyer(i):
         return f'{1000-i[1]}{i[0]}'
     ti = time.perf_counter()
 
     files = get_files(path, quiet=True)[0]
-    artists, albums, genres, filenames = get_tags(files, path)
+    artists, albums, genres, filenames = get_tags(files, path, rescan)
 
     if by_count:
         album_list = sorted([(a,len(c), c[0].artist) for a, c in albums.items()
@@ -1149,13 +1216,13 @@ def list_albums(path, min_count=1, by_count=False, details=False, unfold=False):
     print(f'found {len(album_list)} albums in {path} ({time_str(ti)})')
     return albl, albi, albums
 
-def list_genres(path, min_count=1, by_count=False, details=False, unfold=False):
+def list_genres(path, min_count=1, by_count=False, details=False, unfold=False, rescan=False):
     def keyer(i):
         return f'{1000-i[1]}{i[0]}'
     ti = time.perf_counter()
 
     files = get_files(path, quiet=True)[0]
-    artists, albums, genres, filenames = get_tags(files, path)
+    artists, albums, genres, filenames = get_tags(files, path, rescan)
 
     if by_count:
         gkeyer = lambda x: len(genres[x])
