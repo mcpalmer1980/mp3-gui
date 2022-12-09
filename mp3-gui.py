@@ -398,7 +398,7 @@ def category_menu(window, mode='Artists'):
                 sg.Button('Copy'), sg.Button('Close')] ]
     
     window = sg.Window(title, layout, modal=True, finalize=True)
-    items, indexes, songs = list_items(source, min_count, rescan=True, *opts)
+    items, indexes, songs = list_items(source, min_count, rescan=False, *opts)
     window['LIST'].update(items)
     while True:
         event, values = window.read()
@@ -587,7 +587,7 @@ def filename_menu(parent):
     boxes = ['Ignore Folders', 'Option 2']
     opts = {k :False for k in boxes}
     print('Checking Filenames')
-    match = '{genre}/{artist} - {title}'
+    match = options['pattern']
     wrong = None
 
     layout = [[sg.Text('Source', size=15),
@@ -611,10 +611,15 @@ def filename_menu(parent):
             item = values[event][0]
             expected = item.split(' || ')[1]
             i = window[event].get_indexes()[0]
-            fn = indexes[i]
-            if edit_file(fn, tags, source, match):
+            seltags = tags[indexes[i]]
+            m = edit_file(seltags, source, match)
+            if m == seltags.filename:
                 wrong.pop(i); indexes.pop(i)
-                window['LIST'].update(wrong, scroll_to_index=i-2)
+            else:
+                wrong[i] = f'{seltags.filename} || {m}'
+                indexes[i] = seltags.filename
+            window['LIST'].update(wrong, scroll_to_index=i-2)
+
 
         elif event == 'Scan':
             if os.path.isdir(values['SOURCE']):
@@ -623,13 +628,13 @@ def filename_menu(parent):
             else:
                 window['SOURCE'].update(source)
                 continue
-            match = values['MATCH']
+            match = options['pattern'] = values['MATCH']
             wrong, tags, indexes = verify_filenames(source, match, opts)
             window['LIST'].update(wrong or ['Nothing Found'])   
 
     window.close()
 
-def edit_file(fn, tags, dest, match):
+def edit_file(tags, dest, match):
     def get_match_str(tags, match):
         return match.format(
             title=tags.title,
@@ -638,8 +643,7 @@ def edit_file(fn, tags, dest, match):
             genre=tags.genre)
 
     size = 8, 60
-    orig, all_tags = tags[fn], tags
-    tags = orig.copy()
+    orig, tags = tags, tags.copy()
     match = match if match.endswith('.mp3') else match + '.mp3'
     expected = get_match_str(tags, match)
     layout = [[sg.Text('Expected', size=size[0], key='MTEXT'), sg.Text(expected, key='MATCH')]]
@@ -657,19 +661,7 @@ def edit_file(fn, tags, dest, match):
             window.close()
             return
         elif event == 'Save':
-            fn = os.path.join(dest, orig.filename)
-            newfn = os.path.join(dest, tags.filename)
-            ntags = ID3(fn)
-            ntags['title'] = orig.title = tags.title
-            ntags['artist'] = orig.title = tags.artist
-            ntags['album'] = orig.title = tags.album
-            ntags['genre'] = orig.title = tags.genre
-            ntags.save()
-            orig.filename = newfn
-            all_tags[newfn] = orig
-
-            if orig.filename != tags.filename:
-                os.rename(fn, newfn)
+            update_tags(orig, tags, dest)
             break
         elif event == 'Rename':
             tags.filename = get_match_str(tags, match)
@@ -687,7 +679,7 @@ def edit_file(fn, tags, dest, match):
                 window['MTEXT'].update('Expected')
    
     window.close()
-    return get_match_str(tags, match) == tags.filename
+    return get_match_str(tags, match)
 
 def tags_from_fn(match, text, tags, window):
     parts = []; d = {}
@@ -716,6 +708,13 @@ def verify_filenames(source, match, opts):
     artists, albums, genres, filenames = get_tags(files, source, True)
     if not match.endswith('.mp3'):
         match += '.mp3'
+
+    print('\nFilenames')
+    for f in filenames.items():
+        print(f)
+    print('\nArtists')
+    for a in artists.items():
+        print(a)
 
     ti = time.perf_counter()
     total = len(files)
@@ -845,10 +844,11 @@ def load_options(path=None):
         music = os.path.join(user, 'Music')
         source = music if os.path.exists(music) else user 
         options = dict(
-            theme = 'default',
+            theme = 'default1',
             source = source,
             dest = os.path.join(user, 'output'),
-            font = ('Arial', 14))
+            font = ('Arial', 14),
+            pattern = '{genre}/{artist} - {title}')
         print('Failed to load options: setting default')
     print(f'  {options}')
     if options.get('theme', None) in themes:
@@ -1082,9 +1082,24 @@ def get_tags(files, path, rescan=False):
             self.artist = artist
             self.album = album
             self.genre = genre
+        def update(self, other):
+            self.filename = other.filename
+            self.title = other.title
+            self.artist = other.artist
+            self.album = other.album
+            self.genre = other.genre
+            
         def __repr__(self):
             return f'SongTags ({self.title}, {self.artist}, ' \
                     f'{self.album}, {self.genre})'
+        def __hash__(self):
+                return hash(self.filename)
+        def __getitem__(self, key):
+            if key in self.__slots__:
+                return getattr(self, key)
+        def __setitem__(self, key, value):
+            if key in self.__slots__:
+                setattr(self, key, value)
         def __eq__(self, other):
             if isinstance(other, SongTag):
                 if (self.filename==other.filename and
@@ -1097,6 +1112,7 @@ def get_tags(files, path, rescan=False):
                     self.album, self.genre)
 
     if not hasattr(get_tags, 'history'):
+        get_tags.last_path = path
         get_tags.history = {}
 
     path = os.path.normpath(path)    
@@ -1129,7 +1145,44 @@ def get_tags(files, path, rescan=False):
 
     print(f'Scanned for tags in {path} ({time_str(ti)})')
     get_tags.history[path] = artists, albums, genres, filenames
+    get_tags.last_path = path
     return get_tags.history[path]
+
+def update_tags(otags, ntags, dest):
+    try:
+        dicts = dict(zip( ('artist', 'album', 'genre'), 
+                get_tags.history[get_tags.last_path]))
+        filenames = get_tags.history[get_tags.last_path][3]
+    except:
+        print('Failed loading tag history')
+        return
+
+    for t in dicts.keys():
+        # get old artists/albums/genres dict
+        d = dicts.get(t, {})
+        l = d.get(otags[t], [])
+        # and remove the old tag reference
+        if otags in l:
+            _print(f'{otags} removed from {t}')
+            l.remove(otags)
+        # get the list to match new tags to artist/album/genre dict
+        l = d.get(ntags[t], [])
+        l.append(otags)
+        d[ntags[t]] = l
+    # remove old and add new reference to tags in filename dict
+    filenames.pop(otags.filename)
+    filenames[ntags.filename] = otags
+
+    outtag = ID3(os.path.join(dest, otags.filename))
+    for t in ('title', 'artist', 'album', 'genre'):
+        outtag[t] = ntags[t]
+    outtag.save()
+    if otags.filename != ntags.filename:
+        os.rename(os.path.join(dest, otags.filename),
+                  os.path.join(dest,ntags.filename) )
+
+    otags.update(ntags)
+
 
 def list_artists(path, min_count=1, by_count=False, details=False, unfold=False, rescan=False):
     ti = time.perf_counter()
@@ -1387,6 +1440,11 @@ def scan_playlist(source, opts, window):
     window['Show'].update(disabled=False)
 
     return lines, strip, prefix
+
+def print_dict(d, info='dictionary'):
+    _print('\n', info)
+    for i in d:
+        _print(i, d[i])
 
 if __name__ == '__main__':
     main()
