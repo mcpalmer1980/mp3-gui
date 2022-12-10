@@ -1,7 +1,10 @@
 #!bin/python
 '''
 TODO:
-replace 'default' theme with no theme() call
+multi edit
+keyboard skipping
+folder history
+tooltips
 
 '''
 import os, sys, pickle, time, pyperclip, zlib, textwrap
@@ -637,7 +640,7 @@ def filename_menu(parent):
 
     window.close()
 
-def edit_file(tags, dest, match):
+def edit_file(tags, dest, match=''):
     def get_match_str(tags, match):
         return match.format(
             title=tags.title,
@@ -647,15 +650,22 @@ def edit_file(tags, dest, match):
 
     size = 8, 60
     orig, tags = tags, tags.copy()
-    match = match if match.endswith('.mp3') else match + '.mp3'
+    if match:
+        match = match if match and match.endswith('.mp3') else match + '.mp3'
     expected = get_match_str(tags, match)
-    layout = [[sg.Text('Expected', size=size[0], key='MTEXT'), sg.Text(expected, key='MATCH')]]
+    if match:
+        layout = [[sg.Text('Expected', size=size[0], key='MTEXT'), sg.Text(expected, key='MATCH')]]
+    else:
+        layout = [[]]
 
     items = ('Filename', 'Title', 'Artist', 'Album', 'Genre')
     layout += [ [sg.Text(i, size=size[0]), sg.In(getattr(tags, i.lower()), size=size[1],
                 key=i, enable_events=True)] for i in items]
-    layout += [[sg.Button('Rename'), sg.Button('Re-tag')],
-               [sg.Push(), sg.Button('Cancel'), sg.Button('Save')]]
+    if match:
+        layout += [[sg.Button('Rename'), sg.Button('Re-tag')],
+                   [sg.Push(), sg.Button('Cancel'), sg.Button('Save')]]
+    else:
+        layout += [[sg.Push(), sg.Button('Cancel'), sg.Button('Save')]]
 
     window = sg.Window('Edit Song Details', layout, modal=True)
     while True:
@@ -674,25 +684,26 @@ def edit_file(tags, dest, match):
             
         elif event in items:
             tags.__setattr__(event.lower(), values[event])
-            m = get_match_str(tags, match)
-            window['MATCH'].update(m)
-            if m == tags.filename:
-                window['MTEXT'].update('Match')
-            else:
-                window['MTEXT'].update('Expected')
+            if match:
+                m = get_match_str(tags, match)
+                window['MATCH'].update(m)
+                if m == tags.filename:
+                    window['MTEXT'].update('Match')
+                else:
+                    window['MTEXT'].update('Expected')
    
     window.close()
     return get_match_str(tags, match)
 
 def tag_editor(parent):
     source = options['source']
-    boxes = ('Options 1', 'Option 2')
+    boxes = ('Case Sensitive', 'Option 2')
     opts = {k: False for k in boxes}
     headings = ('Title', 'Artist', 'Album', 'Genre', 'Filename')
     hsizes = [20, 20, 20, 10, 30]
     hsized = dict(zip(headings, hsizes))
-    data = [ ['' for _ in headings]] * 3
-    table_layout = sg.Table(values=data, headings=headings,
+    table = [ ['' for _ in headings]] * 2
+    table_layout = sg.Table(values=table, headings=headings,
             col_widths=hsizes,
             auto_size_columns=False,
             display_row_numbers=False,
@@ -705,7 +716,7 @@ def tag_editor(parent):
 
     layout = [[sg.Text('Source', size=12), sg.In(source, size=(50,1), key='SOURCE'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT",), sg.Button('Scan')],
-            [sg.Text('Filter', size=12), sg.In(size=(50,1), key='MATCH'),
+            [sg.Text('Filter', size=12), sg.In(size=(50,1), key='FILTER'),
                 sg.Combo(('Any',)+headings, default_value='Any', readonly=True,
                         enable_events=True, key='FKEY'),
                 sg.Button('Includes'), sg.Button('Excludes'), sg.Button('Reset')],
@@ -713,51 +724,105 @@ def tag_editor(parent):
                 default=opts.get(box, False)) for box in boxes],
             [table_layout],
             [sg.Push(), sg.Button('Multi Edit'), sg.Button('Close')] ]
-    window = sg.Window('Verify Filenames', layout, modal=True, finalize=True, return_keyboard_events=True)
+    window = sg.Window('Verify Filenames', layout, modal=True,finalize=True, return_keyboard_events=True)
     window['SOURCE'].bind("<Return>", "_ENTER")
+    window['FILTER'].bind("<Return>", "_ENTER")
     etable = window['TABLE']
+
     while True:
         event, values = window.read()
         if event in (sg.WIN_CLOSED, 'Close'):
             break
-        elif event in ('Scan', 'SOURCE_ENTER'):
+        elif event in ('Scan', 'Reset', 'SOURCE_ENTER'):
             s = values['SOURCE']
             if os.path.isdir(s):
                 source = options['source'] = s
-                table = sort_table(make_tag_table(source), 0)
+                table, tags = make_tag_table(source, event=='Reset')
                 window['TABLE'].update(table)
             else:
                 window['SOURCE'].update(source)
+        elif event in ('Includes', 'FILTER_ENTER'):
+            table = filter_tag_table(values['FILTER'], table,
+                    window['FKEY'].get(), headings, opts)
+            window['FILTER'].update('')
+            window['TABLE'].update(table)
+        elif event == 'Excludes':
+            table = filter_tag_table(values['FILTER'], table,
+                    window['FKEY'].get(), headings, opts, True)
+            window['FILTER'].update('')
+            window['TABLE'].update(table)
+        elif event in boxes:
+            opts[event] = values[event]
 
+        # HANDLE TABLE CLICKS
         elif isinstance(event, tuple) and event[0] == 'TABLE':
             selected = values['TABLE']
             clicked = event[2]
             if len(selected) == 1 and selected[0] == clicked[0]:
-                print('Editing row ', clicked[0])
+                # DOUBLE CLICKED TO EDIT
+                row = table[clicked[0]]
+                fn = row[-1]
+                seltags = tags[fn]
+                edit_file(seltags, source)
+                table[clicked[0]] = seltags.as_row()
+                #perc = clicked[0] / len(table)
+                window['TABLE'].update(table)
+                #window
             elif clicked[0] == -1:
-                table = sort_table(table, (clicked[1],))
+                table = sort_table(table, clicked[1])
                 window['TABLE'].update(table)
             else:
                 print(f'Table clicked at {clicked}')
 
-        elif event == 'Multi Edit':
-            print(f'rows seleced: {values["TABLE"]}')
+
+
         elif event == 'TABLE':
             pass
+
+        elif event == 'Multi Edit':
+            print(f'rows seleced: {values["TABLE"]}')
         elif ':' in event and window.find_element_with_focus() == etable:
             print(event, 'pressed')
     window.close()
 
-def make_tag_table(path):
-    files = get_files(path, quiet=True)[0]
-    tags = get_tags(files, path)[-1].values()
+def row_to_tags(row):
+    pass
+
+
+def make_tag_table(path, reset=False):
+    if reset and hasattr(make_tag_table, 'files'):
+        print('resetting')
+        files = make_tag_table.files
+    else:
+        files = make_tag_table.files = get_files(path, quiet=True)[0]
+    tags = get_tags(files, path)[-1]
     table = []
-    for song in tags:
+    for song in tags.values():
         row = song.as_row()
         table.append(row)
+    return sort_table(table), tags
+
+def filter_tag_table(text, table, key, headings, opts, exclude=False):
+    case = lambda x: x
+    if not opts.get('Case Sensitive'):
+        text = text.lower()
+        case = lambda x: x.lower()        
+    if key in headings:
+        i = headings.index(key)
+        if exlude:
+            table = [ r for r in table if text not in case(r[i])]
+        else:
+            table = [ r for r in table if text in case(r[i])]
+    else:
+        if exclude:
+            table = [ r for r in table if text not in case(''.join(r))]
+        else:
+            table = [ r for r in table if text in case(''.join(r))]
     return table
 
-def sort_table(table, col):
+
+
+def sort_table(table, col=0):
     return sorted(table, key=lambda x: x[col])
 
 def sort_table2(table, cols):
@@ -1113,7 +1178,7 @@ def get_tags(files, path, rescan=False):
             self.artist = other.artist
             self.album = other.album
             self.genre = other.genre
-        def as_row(self, folders=False):
+        def as_row(self, folders=True):
             fn = self.filename if folders else os.path.split(self.filename)[1]
             return [self.title, self.artist, self.album,
                     self.genre, fn]
