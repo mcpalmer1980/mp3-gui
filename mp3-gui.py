@@ -2,8 +2,7 @@
 '''
 TODO:
 multi edit
-keyboard skipping
-folder history
+keyboard skipping in sync_menu
 category menu update tags?
 tooltips
 
@@ -155,14 +154,18 @@ def theme_menu(parent, theme=None):
 
 def sync_menu(source='', dest=''):
     def update(results):
+        nonlocal text_rows
         files, folders, extra = results
         print.window = None
+        start = window['console'].get().count('\n') + 1
         results = check_files(files, extra, source, dest, opts)
         if results:
             window['Copy'].update(disabled=False)
             window['Clip Filenames'].update(disabled=False)
             scanned = True
-        window['CONSOLE'].update(print.buffer.getvalue())
+        t = print.buffer.getvalue()
+        text_rows = t.split('\n')[start:], 
+        window['CONSOLE'].update(t)
         window.Refresh()
         return results
 
@@ -196,8 +199,11 @@ def sync_menu(source='', dest=''):
             [sg.Button('Clip Filenames', disabled=True), sg.Push(), sg.Button('Cancel'), 
                     sg.Button('Scan'), sg.Button('Copy', disabled=True)] ]
     
-    window = sg.Window('Sync Files', layout, modal=True, finalize=True)
+    window = sg.Window('Sync Files', layout, modal=True, finalize=True, return_keyboard_events=True)
     window['CONSOLE'].update(print.buffer.getvalue())
+    econsole = window['CONSOLE']
+    scroller = get_scroller(econsole)
+    text_rows = []
     results = False
     while True:
         print.window = window
@@ -242,6 +248,8 @@ def sync_menu(source='', dest=''):
             if not final_results:
                 window['Copy'].update(disabled=True)
                 window['Clip Filenames'].update(disabled=True)
+        elif event[1] == ':' and window.find_element_with_focus() == econsole:
+            scroller(event[0], text_rows)
 
     sync_menu.buffer, print.buffer = print.buffer, _buffer 
     print.window = None
@@ -724,6 +732,7 @@ def edit_file(tags, dest, match=''):
     return get_match_str(tags, match)
 
 def tag_editor(parent):
+    sort_column = 0
     source = options['source']
     boxes = ('Case Sensitive', 'Option 2')
     opts = {k: False for k in boxes}
@@ -758,6 +767,7 @@ def tag_editor(parent):
     window['SOURCE'].bind("<Return>", "_ENTER")
     window['FILTER'].bind("<Return>", "_ENTER")
     etable = window['TABLE']
+    scroller = get_scroller(window['TABLE'])
 
     while True:
         event, values = window.read()
@@ -769,6 +779,7 @@ def tag_editor(parent):
                 source = nsource
                 update_history(window, source)
                 table, tags = make_tag_table(source, event=='Reset')
+                sort_column = 0
                 window['TABLE'].update(table)
             else:
                 window['SOURCE'].update(source)
@@ -796,25 +807,51 @@ def tag_editor(parent):
                 seltags = tags[fn]
                 edit_file(seltags, source)
                 table[clicked[0]] = seltags.as_row()
-                #perc = clicked[0] / len(table)
                 window['TABLE'].update(table)
-                #window
             elif clicked[0] == -1:
-                table = sort_table(table, clicked[1])
+                sort_column = clicked[1]
+                table = sort_table(table, sort_column)
                 window['TABLE'].update(table)
             else:
                 print(f'Table clicked at {clicked}')
-
-
 
         elif event == 'TABLE':
             pass
 
         elif event == 'Multi Edit':
             print(f'rows seleced: {values["TABLE"]}')
-        elif ':' in event and window.find_element_with_focus() == etable:
-            print(event, 'pressed')
+        elif event[1] == ':' and window.find_element_with_focus() == etable:
+            scroller(event[0], table, sort_column)
     window.close()
+
+
+def get_scroller(element):
+    def scroll_to_index(key, data, col=None):
+        nonlocal last_press, keys_pressed
+        c = key.lower()
+        ti = time.perf_counter()
+        if ti - last_press < KEY_DELAY:
+            keys_pressed += c
+        else:
+            keys_pressed = c
+        last_press = ti
+        if col != None:
+            for i, row in enumerate(data):
+                if keys_pressed < row[col].lower():
+                    break
+        else:
+            for i, item in enumerate(data):
+                if keys_pressed < item.lower():
+                    break
+        perc = i / len(data)
+        element.set_vscroll_position(perc)
+        if isinstance(element, sg.Table):
+            element.update(select_rows=[i])
+    KEY_DELAY = 1
+    keys_pressed = ''
+    last_press = 0
+    return scroll_to_index
+
 
 def row_to_tags(row):
     pass
@@ -856,13 +893,6 @@ def filter_tag_table(text, table, key, headings, opts, exclude=False):
 def sort_table(table, col=0):
     return sorted(table, key=lambda x: x[col])
 
-def sort_table2(table, cols):
-    for col in reversed(cols):
-        try:
-            table = sorted(table, key=lambda x: x[col].lower()) 
-        except Exception as e:
-            print('Error in sort_table', e)
-    return table
 
 
 def browser(path, types=None):
