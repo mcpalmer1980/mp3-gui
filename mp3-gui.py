@@ -4,6 +4,7 @@ TODO:
 multi edit
 keyboard skipping
 folder history
+category menu update tags?
 tooltips
 
 '''
@@ -35,6 +36,8 @@ tooltips = {
 tools = list(tooltips.keys())
 themes = sg.theme_list()
 temp_dir = '/tmp'
+MAX_HISTORY = 9
+MAX_FILES = 50000
 
 def main():
     options = load_options()
@@ -154,8 +157,6 @@ def sync_menu(source='', dest=''):
     def update(results):
         files, folders, extra = results
         print.window = None
-        options['source'] = source
-        options['dest'] = dest
         results = check_files(files, extra, source, dest, opts)
         if results:
             window['Copy'].update(disabled=False)
@@ -181,10 +182,12 @@ def sync_menu(source='', dest=''):
         CRC='Use CRC value to compare source and dest folders(slow)')
 
     layout = [[sg.Text('Source', size=10),
-                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
-                sg.FolderBrowse(initial_folder=source)],
+                sg.Combo(options['history'], default_value=source,
+                        size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.FolderBrowse(initial_folder=source), sg.Push(), sg.Button('Swap')],
             [sg.Text('Dest', size=10),
-                sg.In(dest, size=(50,1), enable_events=True ,key='DEST'),
+                sg.Combo(options['history'], default_value=dest, size=(50,1),
+                        enable_events=True ,key='DEST'),
                 sg.FolderBrowse(initial_folder=dest)],
             [sg.Checkbox(box, key=box, tooltip=tooltips[box], enable_events=True,
                     default=checked.get(box, False)) for box in boxes],
@@ -215,6 +218,7 @@ def sync_menu(source='', dest=''):
             time.sleep(1)
             if results:
                 final_results = update(results)
+                update_history(window, source, dest)
         elif event == 'Copy':
             files, folders, extra = results
             files = pick_files(final_results, opts)
@@ -228,6 +232,10 @@ def sync_menu(source='', dest=''):
             return
         elif event == 'Clip Filenames':
             clip_files(final_results, opts)
+        elif event == 'Swap':
+            source, dest = dest, source
+            window['SOURCE'].update(source)
+            window['DEST'].update(dest)
         elif event in boxes and results:
             print.buffer = StringIO()
             final_results = update(results)
@@ -250,8 +258,6 @@ def clean_menu(source='', dest=''):
             window['Remove'].update(disabled=True)
         window['SBUT'].InitialFolder=source
         window['DBUT'].InitialFolder=dest
-        options['source'] = source
-        options['dest'] = dest
         return extras
 
     source = options.get('source', source)
@@ -266,11 +272,13 @@ def clean_menu(source='', dest=''):
         Swap='Swap source and dest folders')
 
     layout = [[sg.Text('Source', size=10),
-                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.Combo(options['history'], default_value=source, size=(50,1),
+                        enable_events=True ,key='SOURCE', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=source, key="SBUT"),
                 sg.Push(), sg.Button('Swap', tooltip=tooltips['Swap'])],
             [sg.Text('Dest', size=10),
-                sg.In(dest, size=(50,1), enable_events=True ,key='DEST'),
+                sg.Combo(options['history'], default_value=dest, size=(50,1),
+                        enable_events=True ,key='DEST', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=dest, key='DBUT')],
             [sg.Checkbox(box, key=box, tooltip=tooltips[box], enable_events=True,
                     default=checked.get(box, False)) for box in boxes],
@@ -311,15 +319,18 @@ def clean_menu(source='', dest=''):
         elif event in boxes:
             extras = update(source, dest, opts)
         elif event == 'SOURCE':
+            print('source event')
             nsource = values['SOURCE']
             if comp_dir(source, nsource, True):
                 source = nsource
                 extras = update(source, dest, opts)
+                update_history(window, source)
         elif event == 'DEST':
             ndest = values['DEST']
             if comp_dir(dest, ndest, True):
                 dest = ndest
                 extras = update(source, dest, opts)
+                update_history(window, dest=dest)
         elif event == 'LIST':
             item = values[event][0]
             if item in extras:
@@ -336,7 +347,8 @@ def verify_menu(window):
     boxes = ('MP3s', 'Other')
 
     layout = [[sg.Text('Source', size=10),
-                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.Combo(options['history'], default_value=source,
+                        size=(50,1), enable_events=True ,key='SOURCE'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT")],
             [sg.Listbox(['Nothing Scanned'], size=(100, 15),
                     key="LIST")],
@@ -365,10 +377,11 @@ def verify_menu(window):
         elif event in boxes:
             extras = update(source, dest, opts)
         elif event == 'Scan':
-            source = options['source'] = values['SOURCE']
+            source = values['SOURCE']
             files = get_files(source, quiet=True)[0]
             items = check_filenames(files)
             window['LIST'].update(values=items)
+            update_history(window, source)
 
 def category_menu(window, mode='Artists'):
     def set_mode(mode):
@@ -390,11 +403,12 @@ def category_menu(window, mode='Artists'):
     title, list_items, min_count = set_mode(mode)
 
     layout = [[sg.Text('Source', size=15),
-                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.Combo(options['history'], default_value=source, size=(50,1),
+                        enable_events=True ,key='SOURCE', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=source, key="SBUT"),
                 sg.Push(), sg.Combo(modes, default_value=mode, readonly=True,
                     enable_events=True, key='MODE')],
-            [sg.Text('Export Subfolder', size=15), sg.In(mode, size=(50,1), key='DEST')],
+            [sg.Text('Export Subfolder', size=15), sg.In(mode, size=(51,1), key='DEST')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=checked.get(box, False)) for box in boxes],
             [sg.Listbox(['Scanning...'], size=(100, 15), enable_events=True,
@@ -440,7 +454,8 @@ def category_menu(window, mode='Artists'):
         elif event == 'SOURCE':
             nsource = values['SOURCE']
             if comp_dir(source, nsource, True):
-                source = options['source'] = nsource
+                source = nsource
+                update_history(window, source)
                 items, indexes, songs = list_items(source, min_count, *opts)
                 window['LIST'].update(values=items)
         elif event == 'MODE':
@@ -483,7 +498,8 @@ def extra_menu(parent):
     print('Showing non-MP3 files')
 
     layout = [[sg.Text('Source', size=15),
-                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.Combo(options['history'], default_value=source, size=(50,1),
+                        enable_events=True, key='SOURCE', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=source, key="SBUT")],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=opts.get(box, False)) for box in boxes],
@@ -510,9 +526,9 @@ def extra_menu(parent):
         elif event == 'SOURCE':
             if os.path.isdir(values[event]):
                 source = os.path.normpath(values[event])
+                update_history(window, source)
                 files = get_extras(source)
                 window['LIST'].update(files)
-                options['source'] = source
         elif event == 'Reset':
             files = get_extras(source)
             window['LIST'].update(files)
@@ -535,18 +551,19 @@ def fix_playlist_menu(parent):
     print('Fixing playlists')
 
     layout = [[sg.Text('Playlist', size=15),
-                sg.In(source, size=(50,1), enable_events=True ,key='SOURCE'),
+                sg.Combo(options['history'], default_value=source, size=(50,1),
+                        enable_events=True ,key='SOURCE', bind_return_key=True),
                 sg.FileBrowse(initial_folder=source, key="SBUT",
                     file_types=file_types)],
-            [sg.Text('Strip', size=15), sg.In(size=(50,1), key='STRIP')],
-            [sg.Text('Prefix', size=15), sg.In(size=(50,1), key='PREFIX')],
+            [sg.Text('Strip', size=15), sg.In(size=(51,1), key='STRIP')],
+            [sg.Text('Prefix', size=15), sg.In(size=(51,1), key='PREFIX')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=opts.get(box, False)) for box in boxes],
             [sg.Listbox(['Load a Playlist'], size=(100, 15), enable_events=True,
                     key="LIST")],
             [sg.Push(), sg.Button('Save', disabled=True),
                     sg.Button('Show', disabled=True), sg.Button('Close')] ]
-    window = sg.Window('Extra File Browser', layout, modal=True, finalize=True)
+    window = sg.Window('Playlist Fixer', layout, modal=True, finalize=True)
 
     while True:
         event, values = window.read()
@@ -559,9 +576,17 @@ def fix_playlist_menu(parent):
         elif event == 'LIST':
             item = values[event][0]
         elif event == 'SOURCE':
-            if os.path.isfile(values[event]):
+            nsource = values[event]
+            if os.path.isfile(nsource):
                 playlist = values[event]
-                files, strip, prefix = scan_playlist(values[event], opts, window)
+                source = os.path.split(nsource)[0]
+                files, strip, prefix = scan_playlist(playlist, opts, window)
+            elif os.path.isdir(nsource):
+                source = nsource
+                update_history(window, source)
+                window['LIST'].update(['Load a Playlist'])
+                window['Show'].update('Show', disabled=True)
+                window['SBUT'].InitialFolder = source
         elif event == 'Show':
             if window[event].get_text() == 'Show':
                 prefix = window['PREFIX'].get()
@@ -580,7 +605,9 @@ def fix_playlist_menu(parent):
             fn = sg.popup_get_file('Save Playlist', save_as=True,
                     default_path=path, default_extension='.m3u',
                     file_types=file_types)
-            print(fn)
+            if os.path.isdir(fn) or not os.path.isdir(os.path.split(fn)[0]):
+                print('invalid path to save playlist')
+                continue
             with open(fn, 'w') as outp:
                 for f in files:
                     if f[0] != '#':
@@ -590,16 +617,17 @@ def fix_playlist_menu(parent):
 
 def filename_menu(parent):
     source = options['source']
-    boxes = ['Ignore Folders', 'Option 2']
+    boxes = ['Ignore Folders']
     opts = {k :False for k in boxes}
     print('Checking Filenames')
     match = options['pattern']
     wrong = None
 
     layout = [[sg.Text('Source', size=15),
-                sg.In(source, size=(50,1), key='SOURCE'),
+                sg.Combo(options['history'], default_value=source,
+                        size=(50,1), key='SOURCE'),
                 sg.FileBrowse(initial_folder=source, key="SBUT",)],
-            [sg.Text('Match', size=15), sg.In(match, size=(50,1), key='MATCH')],
+            [sg.Text('Match', size=15), sg.In(match, size=(51,1), key='MATCH')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=opts.get(box, False)) for box in boxes],
             [sg.Listbox(['Nothing Found'], size=(100, 15), enable_events=True,
@@ -630,7 +658,7 @@ def filename_menu(parent):
         elif event == 'Scan':
             if os.path.isdir(values['SOURCE']):
                 source = values['SOURCE']
-                options['source'] = source
+                update_history(window, source)
             else:
                 window['SOURCE'].update(source)
                 continue
@@ -714,9 +742,11 @@ def tag_editor(parent):
             expand_y=True,
             enable_click_events=True)
 
-    layout = [[sg.Text('Source', size=12), sg.In(source, size=(50,1), key='SOURCE'),
+    layout = [[sg.Text('Source', size=12),
+                sg.Combo(options['history'], default_value=source, size=(50,1),
+                bind_return_key=True, key='SOURCE'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT",), sg.Button('Scan')],
-            [sg.Text('Filter', size=12), sg.In(size=(50,1), key='FILTER'),
+            [sg.Text('Filter', size=12), sg.In(size=(51,1), key='FILTER'),
                 sg.Combo(('Any',)+headings, default_value='Any', readonly=True,
                         enable_events=True, key='FKEY'),
                 sg.Button('Includes'), sg.Button('Excludes'), sg.Button('Reset')],
@@ -734,9 +764,10 @@ def tag_editor(parent):
         if event in (sg.WIN_CLOSED, 'Close'):
             break
         elif event in ('Scan', 'Reset', 'SOURCE_ENTER'):
-            s = values['SOURCE']
-            if os.path.isdir(s):
-                source = options['source'] = s
+            nsource = values['SOURCE']
+            if os.path.isdir(nsource):
+                source = nsource
+                update_history(window, source)
                 table, tags = make_tag_table(source, event=='Reset')
                 window['TABLE'].update(table)
             else:
@@ -938,7 +969,8 @@ def load_options(path=None):
             source = source,
             dest = os.path.join(user, 'output'),
             font = ('Arial', 14),
-            pattern = '{genre}/{artist} - {title}')
+            pattern = '{genre}/{artist} - {title}',
+            history = [source])
         print('Failed to load options: setting default')
     print(f'  {options}')
     if options.get('theme', None) in themes:
@@ -984,6 +1016,26 @@ def time_str(ti):
     else:
         return f'{ti/(1000*60):.1f} min'
 
+def update_history(window, source=None, dest=None):
+    history = options['history']
+    if source:
+        source = os.path.normpath(source)
+        if source in history:
+            history.remove(source)
+        history.insert(0, source)
+        history = history[:MAX_HISTORY]
+        options['source'] = source
+        e = window.Find('SOURCE', True)
+        if e: window['SOURCE'].update(source, history)
+    if dest:
+        dest = os.path.normpath(dest)
+        if dest in history:
+            history.remove(dest)
+        history.insert(0, dest)
+        history = history[:MAX_HISTORY]
+        options['dest'] = dest
+        e = window.Find('DEST', True)
+        if e: window['DEST'].update(dest, history)
 
 ## M P 3  F U N C T I O N S
 def check_filenames(files, dashes=False):
@@ -1154,6 +1206,8 @@ def get_files(path, extensions=('.mp3',), subfolders=True, quiet=False):
                 folders.append(os.path.join(dirpath, dirname)[trim:])
             if in_folder:
                 print(f'  {dots}{sp[-1]}: {in_folder} MP3s')
+            if total > MAX_FILES:
+                raise Exception(f'Exceeded file limit of {MAX_FILES}: {total}')
     else:
         for f in os.listdir(path):
             if os.path.splitext(f)[-1].lower() in extensions:
