@@ -3,8 +3,8 @@ import pyperclip, sys
 def convert_to_dict(text):
     lines = ['dict = {']
     for line in text.split('\n'):
-        if line:
-            line = line.strip()
+        if line and not line.startswith('#'):
+            line = line.lstrip('-').strip()
             r = line.split(' - ')
             if len(r) == 2:
                 key, value = r

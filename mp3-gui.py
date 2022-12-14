@@ -1,9 +1,11 @@
 #!bin/python
 '''
+FIX:
+Cannot edit tags found in from scan function
 TODO:
 keyboard scrolling: 
 category menu update tags?
-tooltips
+Fix Playlist - Remove Clicked
 
 '''
 import os, sys, pickle, time, pyperclip, zlib, subprocess
@@ -15,14 +17,11 @@ from io import StringIO
 ## G L O B A L  V A L U E S
 icon = b'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bXAub3JnL3htcC8iCiAgICB4bWxuczp0aWZmPSJodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyIKICAgIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIKICAgeG1wTU06RG9jdW1lbnRJRD0iZ2ltcDpkb2NpZDpnaW1wOjI2NDMwZTc4LWQ2YjYtNDk3Mi1iMDMyLThlYWVmMTQ4ZGZmOSIKICAgeG1wTU06SW5zdGFuY2VJRD0ieG1wLmlpZDozYjBjNjJkYi00MWNhLTQyNTYtOWNiNi0xZjg4MzhlMWQyZGIiCiAgIHhtcE1NOk9yaWdpbmFsRG9jdW1lbnRJRD0ieG1wLmRpZDpjNjZmNzNhMS00ZTQzLTRkNTktODVjNy1jZmY5NThiY2U2ZmEiCiAgIGRjOkZvcm1hdD0iaW1hZ2UvcG5nIgogICBHSU1QOkFQST0iMi4wIgogICBHSU1QOlBsYXRmb3JtPSJMaW51eCIKICAgR0lNUDpUaW1lU3RhbXA9IjE2NzAxNTg4OTk1NDA2NTciCiAgIEdJTVA6VmVyc2lvbj0iMi4xMC4zMiIKICAgdGlmZjpPcmllbnRhdGlvbj0iMSIKICAgeG1wOkNyZWF0b3JUb29sPSJHSU1QIDIuMTAiCiAgIHhtcDpNZXRhZGF0YURhdGU9IjIwMjI6MTI6MDRUMDg6MDE6MzctMDU6MDAiCiAgIHhtcDpNb2RpZnlEYXRlPSIyMDIyOjEyOjA0VDA4OjAxOjM3LTA1OjAwIj4KICAgPHhtcE1NOkhpc3Rvcnk+CiAgICA8cmRmOlNlcT4KICAgICA8cmRmOmxpCiAgICAgIHN0RXZ0OmFjdGlvbj0ic2F2ZWQiCiAgICAgIHN0RXZ0OmNoYW5nZWQ9Ii8iCiAgICAgIHN0RXZ0Omluc3RhbmNlSUQ9InhtcC5paWQ6YjE3OTIyMmMtYjJjOC00NDNjLWFlOGUtODY0NTgwMTJmNmJjIgogICAgICBzdEV2dDpzb2Z0d2FyZUFnZW50PSJHaW1wIDIuMTAgKExpbnV4KSIKICAgICAgc3RFdnQ6d2hlbj0iMjAyMi0xMi0wNFQwODowMTozOS0wNTowMCIvPgogICAgPC9yZGY6U2VxPgogICA8L3htcE1NOkhpc3Rvcnk+CiAgPC9yZGY6RGVzY3JpcHRpb24+CiA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgCjw/eHBhY2tldCBlbmQ9InciPz4Y6lR8AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAB3RJTUUH5gwEDQEn8pI/EAAABg1JREFUeNrt3T1y4zoQhVFBpVjesQPv2N4AJpnAgafGkgAS6HtO1Qvf2CbZH5uSf9qFAXp3DI7SmmMw8Gg6BAZeDAQAQy8EAoDBFwIBwOALgQAYfERAAAw/QiAABh8READDjwgIgOFHBATA8CMCAmD4EQEBMPiIwFauDgG2QBuAE45NQAAMPyIgAIYfEfAaAHhEtAE4qdgEBMDwIwQeAcAjQRk3J2+8t/cv8/OAz4+7g+ARYO8AGPqqIaj9KNAMv8EXgdwI3FxyBp/f3lTqhaDVPFGG3xZgG7ABGHym3GTqRMDbgAhtsEIBmLv+uyg5+lFTANyREAEBMPysG4G9Q3CtcyLA9WcDcPdHBAQAEACwBQiA9R8REAA4LAJ7hEAAIHgbEAAIjoAAQDABgOAtQAAgOAICAIdGYK0QCAAEbwMCwJJ8I5YAgC1AAEAEBABEQABABAQAREAAQAQEYDBvQZESAQGA4AgIAARHQAAgOAICAMEREAAIjoAAQHAEBACCIyAAEBwBAYDgCAgABEdAACA4AgIAwQQAgrcAAYDgCAgAeAQAErcAAQAbAJC4BQgA2ACAxC1AAMAGAOvx25nnbwECADYAsAUIACAAYAsQAFgqAkIw3s0hYPdt4PPj7sAIAKKwntXjJAAQvLF4DQCCNxYBgOAICAAER0AAIDgCAgDBBAAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAO9uKfBuu94kHxxyZr8teFhwag5vBT17/CnhyGq+FHGO4CYPgRAQEw/CAAYAsQAHd/REAAAAEABAAQAGB7t3M+bBvwb/Tin1ubePy9nstpAWgD/52+6Oe2+sdvCwbhf1+7aBXaAFhLO3jI2oD/RxAEgI1C0Db6XHNca1ywFdb/ise1fftv5ufq3IUGgDUjcMZQioAALLeeOi7Hf75CEBYAJ9zxdU3YADBQCICLe4Xj1J1XAQBWV+T7AGZ8V+BO+i+PUeLW4vsEbACG4u8g9MWPl2G1AXDAkLWTP05/IAKe5W0A7uYF7rT9yS2kuy5sAGSHphvkGhvASiexGU5fpwA4BCAAXgcAAQAEoDybQsb58vwvAGweQbEWgFMvGHeR885jc94m2+D7AEa/B/zMT7VVex/a27FsEQAVrzdwzXXjEWD2CXVXmXNcesFrxQZgAKZcSKv8KGpKDA2+ALizGzAqPgIA4QF49XWA3X6nnfXao44AYPgfjIAQLBoAJ8bwu9ZsAJEXpOEXAQE48SLw/L/O8Du+Kwl4G9CdYL0BPerXmPu14ALApnflPigGIlDsEcB6Ou5r7Rff3msDwN19k6/j2U3AFiAAhjw8AhR5BDBEEB4Aw8ozjwHYAAABsFGAABCzxot8sQA4ofCqmwGf+XFS339uE46xF/HCAoAgGHwBWGojcTGe/yzvcdFrAMNOrAtj/+F2jjcIgDsn2ABwh3NsBMBJxnUhAC4Qz//OrQCA4RcAJx3XweFuLhTGH1fv8wsAQjA9BAa/aAC6i6HcptUMfm4AesEL2nF6/Wtrht0GgA2Bs3gbEAQAEABAAH7W/Egf5b29fwkAIAC2ANz9i3vibcDWLpfu/RsMfu4jQGu2AQx/5Abw0yOBjQADHxiAVV4bGBsgFwkeAQABAAQAEABAAAABAAQAEABAAAABAAQAEABAAAABAARgWZ8fdwcBAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABAAQAAAAQAEABCAc/m1YCRcZwIANgBsAQjAtlpzKnGDsQHYAkAARIDka+r3G7EAQPANpVAA5r4OYAug4nVkAxABSl0/j90IBUAECL5uCr591vtRH+nt/cuVzULD//hjsACIAGXu+gJwSgSEgPPX/edeBBcAkaDEc74AbBEBWGX4L5fS7wL4+QAIDgC4+wc/AngUwPDbADwKgEcAcGOLfATwKIDhFwARwPCnB0AEMPzhARABDH94AEQAwx8eABEge/gFQAQIHn4BEAKCh18ARIDQwRcAISB48AVABAgefAEQA8KHXwCEgMChFwAxIHjov/sDGBifz8Hi978AAAAASUVORK5CYII='
 icon = sg.EMOJI_BASE64_HAPPY_IDEA
-tools = ('Sync to Dest', 'Remove Extras', 'Verify Filenames', 'Artists',
-        'Show Albums', 'Show non-MP3s', 'Tags', 'Make Album Playlists',
-        'Fix Playlist', 'Change Theme')
-tooltips = {
+main_tips = {
     'Sync to Dest': 'Copy missing MP3s from source folder to chosen destination',
     'Clean Dest': 'Remove any files from destination folder if missing in source folder',
     'Verify Filenames': 'Compare filenames to MP3 tags and detect mangled filenames',
-    'Show Non-MP3s': 'Show or delete non-MP3 files in source older',
+    'Show non-MP3s': 'Show or delete non-MP3 files in source older',
     'Fix Playlist': 'Normalize playlist to use relative paths and remove extra lines',
     'Browser': 'Button for testing my custom file browsr',
     'Artists': 'Display all artists in source folder and edit mislabeled artist tags',
@@ -30,15 +29,15 @@ tooltips = {
     'Genres': 'Display all genres in source folder and edit mislabeled genres tags',
     'Editor': 'Show, filter, and edit the tags for all MP3s in source folder',
     'Change Theme': 'Change GUI colors and font size', }
-
-tools = list(tooltips.keys())
 themes = sg.theme_list()
 temp_dir = '/tmp'
 MAX_HISTORY = 9
 MAX_FILES = 50000
 
 def main():
-    options = load_options()
+    global tooltips
+    options = load_options()    
+    tooltips = load_tooltips('README.md')
     window = main_window()
     returned_at = time.perf_counter() - 1
 
@@ -71,14 +70,16 @@ def main():
                 category_menu(window, 'Genres')
             elif event == 'Browser':
                 browser('/home/michael')
-            elif event == 'Editor':
+            elif event == 'Tag Editor':
                 tag_editor(window)
             elif event == 'Show non-MP3s':
                 extra_menu(window)
             elif event == 'Copy':
                 pyperclip.copy(print.buffer.getvalue())
             elif event == '?':
-                help_window(window)
+                if os.path.exists('README.md'):
+                    subprocess.call(('xdg-open', 'README.md'))
+                #help_window(window)
             else:
                 print(f'{event}: {values}')
             returned_at = time.perf_counter()
@@ -91,6 +92,8 @@ def main():
 
 ## W I N D O W S
 def main_window(theme='DarkBlack1', size=16):
+    maintips = tooltips.get('main', main_tips)
+    tools = list(maintips.keys())
     top_row = 6
     opt1 = tools[:top_row]
     opt2 = tools[top_row:]
@@ -99,16 +102,18 @@ def main_window(theme='DarkBlack1', size=16):
     font = options.get('font', ('Arial', size))
     sg.set_options(font=font, tooltip_font=font)
     sg.theme(theme)
-    layout = [[sg.Button(opt, tooltip=tooltips[opt]) for opt in opt1] + [
+    layout = [[sg.Button(opt) for opt in opt1] + [
                     sg.Push(), sg.Button('?')],
-              [sg.Button(opt, tooltip=tooltips[opt]) for opt in opt2],
-              [sg.Multiline(default_text=print.buffer.getvalue(),
-                    enable_events=False, size=(120, 20),
+              [sg.Button(opt) for opt in opt2],
+              [sg.Multiline(default_text=print.buffer.getvalue(),enable_events=False,
+                    size=(120, 20), expand_x=True, expand_y=True,
                     key="CONSOLE", write_only=True, disabled=True, autoscroll=True)],
               [sg.Push(), sg.Text('History:'), sg.Button('Clear'), sg.Button('Copy'),
                     sg.Button('Save')] ]
-    return sg.Window('MP3 Gui', layout, font=options['font'], icon=icon,
-            enable_close_attempted_event=True, finalize=True)
+    window = sg.Window('MP3 Gui', layout, font=options['font'], icon=icon,
+            enable_close_attempted_event=True, resizable=True, finalize=True)
+    set_tooltips(window, 'main')
+    return window
 
 def help_window(parent, filename='README.md'):
     try:
@@ -134,10 +139,12 @@ def theme_menu(parent, theme=None):
     else:
         print('Changing theme')    
 
-    layout = [[sg.Listbox(values=themes, size=(30,10), key='LIST',
+    layout = [[sg.Listbox(values=themes, size=(30,10), key='List',
                     enable_events=True)],
              [sg.Text('Size:'), sg.Slider(default_value=size, range=(6,24),
                     key='size', orientation='h')],
+             [sg.Checkbox('Show Tooltips', default=options['tooltips'],
+                    key='tooltips')],
              [sg.Push(), sg.Button('Cancel'), sg.Button('Change')]]
  
     window = sg.Window("Theme Chooser", layout, modal=True,
@@ -146,13 +153,14 @@ def theme_menu(parent, theme=None):
 
     if theme in themes:
         i = themes.index(theme)
-        window['LIST'].update(set_to_index=[i], scroll_to_index=max(i-3, 0))
+        window['List'].update(set_to_index=[i], scroll_to_index=max(i-3, 0))
     while True:
         event, values = window.read()
         if event == 'Change':
-            theme = values.get('LIST')
+            theme = values.get('List')
             new_size = int(values.get('size', size))
             options['font'] = (font, new_size)
+            options['tooltips'] = values['tooltips']
             if new_size != size:
                 print(f'Size changed to {new_size}')
             if theme and theme[0] in themes:
@@ -167,8 +175,8 @@ def theme_menu(parent, theme=None):
             print('Canceled theme change')
             window.close()
             break
-        elif event == 'LIST':
-            theme = values['LIST'][0]
+        elif event == 'List':
+            theme = values['List'][0]
             window.close()
             return theme_menu(parent, theme)
     return parent
@@ -196,30 +204,25 @@ def sync_menu(source='', dest=''):
     boxes = ('Missing', 'Different', 'Same', 'Extra', 'Clear', 'CRC')
     checked = dict(Missing=True)
     scanned = False
-    tooltips = dict(
-        Missing='Show/Copy files missing in dest folder',
-        Different='Show/Copy files different in dest folder',
-        Extra='Show/Copy non-MP3 files from source folder',
-        Same='Show/Copy files that are the same in dest folder',
-        Clear='Clear album title in dest folder',
-        CRC='Use CRC value to compare source and dest folders(slow)')
 
     layout = [[sg.Text('Source', size=10),
                 sg.Combo(options['history'], default_value=source,
-                        size=(50,1), enable_events=True ,key='SOURCE'),
+                        size=(50,1), enable_events=True ,key='Source'),
                 sg.FolderBrowse(initial_folder=source), sg.Push(), sg.Button('Swap')],
             [sg.Text('Dest', size=10),
                 sg.Combo(options['history'], default_value=dest, size=(50,1),
-                        enable_events=True ,key='DEST'),
+                        enable_events=True ,key='Dest'),
                 sg.FolderBrowse(initial_folder=dest)],
-            [sg.Checkbox(box, key=box, tooltip=tooltips[box], enable_events=True,
+            [sg.Checkbox(box, key=box, enable_events=True,
                     default=checked.get(box, False)) for box in boxes],
-            [sg.Multiline(enable_events=False, size=(100, 15),
+            [sg.Multiline(enable_events=False, size=(100, 15), expand_x=True, expand_y=True,
                     key="CONSOLE", write_only=True, disabled=True, autoscroll=True)],
             [sg.Button('Clip Filenames', disabled=True), sg.Push(), sg.Button('Cancel'), 
                     sg.Button('Scan'), sg.Button('Copy', disabled=True)] ]
     
-    window = sg.Window('Sync Files', layout, modal=True, finalize=True, return_keyboard_events=True)
+    window = sg.Window('Sync Files', layout, modal=True, finalize=True,
+            return_keyboard_events=True, resizable=True)
+    set_tooltips(window, 'Sync to Dest')
     window['CONSOLE'].update(print.buffer.getvalue())
     econsole = window['CONSOLE']
     scroller = get_scroller(econsole)
@@ -230,8 +233,8 @@ def sync_menu(source='', dest=''):
         event, values = window.read()
         values = values or {}
         opts = {k:values.get(k, False) for k in boxes}
-        source = values.get('SOURCE', source)
-        dest = values.get('DEST', dest)
+        source = values.get('Source', source)
+        dest = values.get('Dest', dest)
 
         if event in ('Cancel', sg.WIN_CLOSED):
             window.close()
@@ -259,10 +262,9 @@ def sync_menu(source='', dest=''):
         elif event == 'Clip Filenames':
             clip_files(final_results, opts)
         elif event == 'Swap':
-            print('swap')
             source, dest = dest, source
-            window['SOURCE'].update(source)
-            window['DEST'].update(dest)
+            window['Source'].update(source)
+            window['Dest'].update(dest)
         elif event in boxes and results:
             print.buffer = StringIO()
             final_results = update(results)
@@ -278,7 +280,7 @@ def sync_menu(source='', dest=''):
 def clean_menu(source='', dest=''):
     def update(source, dest, opts):
         extras = find_unexpected(source, dest, opts)
-        window['LIST'].update(values=extras or ['Nothing found'])
+        window['List'].update(values=extras or ['Nothing found'])
         if extras:
             window['Clip Filenames'].update(disabled=False)
             window['Remove'].update(disabled=False)
@@ -294,29 +296,26 @@ def clean_menu(source='', dest=''):
     print('Opening clean menu')
     boxes = ('MP3s', 'Other')
     checked = dict(MP3s=True, Other=False)
-    tooltips = dict(
-        MP3s='Remove extra MP3s from dest folder',
-        Other='Remove other extra files from dest folder',
-        Remove='Delete shown files from dest folder',
-        Swap='Swap source and dest folders')
 
     layout = [[sg.Text('Source', size=10),
                 sg.Combo(options['history'], default_value=source, size=(50,1),
-                        enable_events=True ,key='SOURCE', bind_return_key=True),
+                        enable_events=True ,key='Source', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=source, key="SBUT"),
-                sg.Push(), sg.Button('Swap', tooltip=tooltips['Swap'])],
+                sg.Push(), sg.Button('Swap')],
             [sg.Text('Dest', size=10),
                 sg.Combo(options['history'], default_value=dest, size=(50,1),
-                        enable_events=True ,key='DEST', bind_return_key=True),
+                        enable_events=True ,key='Dest', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=dest, key='DBUT')],
-            [sg.Checkbox(box, key=box, tooltip=tooltips[box], enable_events=True,
+            [sg.Checkbox(box, key=box, enable_events=True,
                     default=checked.get(box, False)) for box in boxes],
-            [sg.Listbox(['Scanning'], size=(100, 15),
-                    key="LIST", enable_events=True)],
+            [sg.Listbox(['Scanning'], size=(100, 15), expand_x=True, expand_y=True,
+                    key="List", enable_events=True)],
             [sg.Button('Clip Filenames', disabled=True), sg.Push(), sg.Button('Cancel'), 
-                    sg.Button('Remove', tooltip=tooltips['Remove'], disabled=True)] ]
+                    sg.Button('Remove', disabled=True)] ]
     
-    window = sg.Window('Clean Dest Folder', layout, modal=True, finalize=True)
+    window = sg.Window('Clean Destination Folder', layout, modal=True,
+            resizable=True, finalize=True)
+    set_tooltips(window, 'Clean Dest')
 
     extras =  update(source, dest, checked)
     while True:
@@ -342,30 +341,30 @@ def clean_menu(source='', dest=''):
             pyperclip.copy(s)
         elif event == 'Swap':
             source, dest = dest, source
-            window['SOURCE'].update(source)
-            window['DEST'].update(dest)
+            window['Source'].update(source)
+            window['Dest'].update(dest)
             extras = update(source, dest, opts)
         elif event in boxes:
             extras = update(source, dest, opts)
-        elif event == 'SOURCE':
+        elif event == 'Source':
             print('source event')
-            nsource = values['SOURCE']
+            nsource = values['Source']
             if comp_dir(source, nsource, True):
                 source = nsource
                 extras = update(source, dest, opts)
                 update_history(window, source)
-        elif event == 'DEST':
-            ndest = values['DEST']
+        elif event == 'Dest':
+            ndest = values['Dest']
             if comp_dir(dest, ndest, True):
                 dest = ndest
                 extras = update(source, dest, opts)
                 update_history(window, dest=dest)
-        elif event == 'LIST':
+        elif event == 'List':
             item = values[event][0]
             if item in extras:
                 i = extras.index(item)
                 extras.remove(item)
-                window['LIST'].update(values=extras or ['Nothing found'],
+                window['List'].update(values=extras or ['Nothing found'],
                         scroll_to_index=max(i-2, 0))
         else:
             print(f'{event} {values}')
@@ -378,10 +377,10 @@ def verify_menu(window):
 
     layout = [[sg.Text('Source', size=10),
                 sg.Combo(options['history'], default_value=source,
-                        size=(50,1), enable_events=True ,key='SOURCE'),
+                        size=(50,1), enable_events=True ,key='Source'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT")],
             [sg.Listbox(['Nothing Scanned'], size=(100, 15),
-                    key="LIST")],
+                    key="List")],
             [sg.Push(), sg.Button('Copy'), sg.Button('Scan'), sg.Button('Close')] ]
     
     window = sg.Window('Verify Filenames', layout, modal=True, finalize=True)
@@ -401,16 +400,16 @@ def verify_menu(window):
             pyperclip.copy(s)
         elif event == 'Swap':
             source, dest = dest, source
-            window['SOURCE'].update(source)
-            window['DEST'].update(dest)
+            window['Source'].update(source)
+            window['Dest'].update(dest)
             extras = update(source, dest, opts)
         elif event in boxes:
             extras = update(source, dest, opts)
         elif event == 'Scan':
-            source = values['SOURCE']
+            source = values['Source']
             files = get_files(source, quiet=True)[0]
             items = check_filenames(files)
-            window['LIST'].update(values=items)
+            window['List'].update(values=items)
             update_history(window, source)
 
 def category_menu(window, mode='Artists'):
@@ -434,23 +433,25 @@ def category_menu(window, mode='Artists'):
 
     layout = [[sg.Text('Source', size=15),
                 sg.Combo(options['history'], default_value=source, size=(50,1),
-                        enable_events=True ,key='SOURCE', bind_return_key=True),
+                        enable_events=True ,key='Source', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=source, key="SBUT"),
                 sg.Push(), sg.Combo(modes, default_value=mode, readonly=True,
                     enable_events=True, key='MODE')],
-            [sg.Text('Export Subfolder', size=15), sg.In(mode, size=(51,1), key='DEST')],
+            [sg.Text('Export Subfolder', size=15), sg.In(mode, size=(51,1),
+                    key='Export Subfolder')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=checked.get(box, False)) for box in boxes],
             [sg.Listbox(['Scanning...'], size=(100, 15), enable_events=True,
-                    key="LIST", horizontal_scroll=True)],
+                    key="List", horizontal_scroll=True, expand_x=True, expand_y=True)],
             [sg.Text('Minimum Count'), sg.Input(min_count, size=5,
-                    enable_events=True, key='COUNT'),
+                    enable_events=True, key='Minimum Count'),
                 sg.Push(), sg.Button('Make Playlists'),
                 sg.Button('Copy'), sg.Button('Close')] ]
     
-    window = sg.Window(title, layout, modal=True, finalize=True)
+    window = sg.Window(title, layout, modal=True, finalize=True, resizable=True)
+    set_tooltips(window, mode)
     items, indexes, songs = list_items(source, min_count, rescan=False, *opts)
-    window['LIST'].update(items)
+    window['List'].update(items)
     while True:
         event, values = window.read()
 
@@ -465,7 +466,7 @@ def category_menu(window, mode='Artists'):
                 s += os.path.join(dest, f) + '\n'
             pyperclip.copy(s)
         elif event == 'Make Playlists':
-            make_playlists(songs, mode, source, min_count, values['DEST'])
+            make_playlists(songs, mode, source, min_count, values['Export Subfolder'])
         elif event in boxes:
             if event=='Unfold Details' and values.get('Unfold Details', False):
                 window['Extra Details'].update(True)
@@ -473,33 +474,34 @@ def category_menu(window, mode='Artists'):
                 window['Unfold Details'].update(False)
             opts = [values.get(k, False) for k in boxes]
             items, indexes, songs = list_items(source, min_count, *opts)
-            window['LIST'].update(values=items)
-        elif event == 'COUNT':
+            window['List'].update(values=items)
+        elif event == 'Minimum Count':
             try:
-                min_count = int(values['COUNT'])
+                min_count = int(values['Minimum Count'])
             except:
                 continue
             items, indexes, songs = list_items(source, min_count, *opts)
-            window['LIST'].update(values=items)
-        elif event == 'SOURCE':
-            nsource = values['SOURCE']
+            window['List'].update(values=items)
+        elif event == 'Source':
+            nsource = values['Source']
             if comp_dir(source, nsource, True):
                 source = nsource
                 update_history(window, source)
                 items, indexes, songs = list_items(source, min_count, *opts)
-                window['LIST'].update(values=items)
+                window['List'].update(values=items)
         elif event == 'MODE':
             new_mode = values['MODE']
             title, list_items, min_count = set_mode(new_mode)
             items, indexes, songs = list_items(source, min_count, *opts)
-            window['LIST'].update(items)
-            window['COUNT'].update(min_count)
-            old = window['DEST'].get()
-            window['DEST'].update(old.replace(mode, new_mode))
+            window['List'].update(items)
+            window['Minimum Count'].update(min_count)
+            old = window['Export Subfolder'].get()
+            window['Export Subfolder'].update(old.replace(mode, new_mode))
             mode = new_mode
             window.set_title(title)
-        elif event == 'LIST':
-            selected = window['LIST'].GetIndexes()[0]
+            set_tooltips(window, mode)
+        elif event == 'List':
+            selected = window['List'].GetIndexes()[0]
             key = indexes[selected]
             if indexes[selected]:
                 value = sg.popup_get_text('', title='Change Value', default_text=key)
@@ -512,7 +514,7 @@ def category_menu(window, mode='Artists'):
                         tag[attr] = value
                         tag.save()
                     items[selected] = items[selected].replace(key, value, 1)
-                    window['LIST'].update(items, set_to_index=[selected],
+                    window['List'].update(items, set_to_index=[selected],
                             scroll_to_index=max(selected-3, 0))
 
 def extra_menu(parent):
@@ -521,26 +523,27 @@ def extra_menu(parent):
         return sorted(extras, key=lambda x:x.lower())
 
     source = options['source']
-    boxes = ['Filter Same Folder', 'Filter Same Exts']
+    boxes = ['Filter Same Folder', 'Filter Same Extentions']
     opts = {k :False for k in boxes}
-    tooltips = {
-        'LIST': 'Click items to filter it or similar items from list'    }
     print('Showing non-MP3 files')
 
     layout = [[sg.Text('Source', size=15),
                 sg.Combo(options['history'], default_value=source, size=(50,1),
-                        enable_events=True, key='SOURCE', bind_return_key=True),
+                        enable_events=True, key='Source', bind_return_key=True),
                 sg.FolderBrowse(initial_folder=source, key="SBUT")],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=opts.get(box, False)) for box in boxes],
             [sg.Listbox(['Scanning...'], size=(100, 15), enable_events=True,
-                    key="LIST", tooltip=tooltips['LIST'])],
+                    key="List", expand_x=True, expand_y=True)],
             [sg.Button('Clip Filenames'), sg.Push(), sg.Button('Reset'),
                     sg.Button('Remove'), sg.Button('Close')] ]
-    window = sg.Window('Extra File Browser', layout, modal=True, finalize=True)
+    window = sg.Window('Extra File Browser', layout, modal=True,
+            resizable=True, finalize=True)
+    set_tooltips(window, 'Show non-MP3s')
     files = get_extras(source)
-    window['LIST'].update(files)
+    window['List'].update(files)
     while True:
+        print('in loops')
         event, values = window.read()
         if event in (sg.WIN_CLOSED, 'Close'):
             break
@@ -551,21 +554,21 @@ def extra_menu(parent):
                     opts[i] = False
                 window[event].update(True)
             opts = {k :window[k].get() for k in boxes}
-        elif event == 'LIST':
+        elif event == 'List':
             item = values[event][0]
             remove_extras(files, item, opts, window)
-        elif event == 'SOURCE':
+        elif event == 'Source':
             if os.path.isdir(values[event]):
                 source = os.path.normpath(values[event])
                 update_history(window, source)
                 files = get_extras(source)
-                window['LIST'].update(files)
+                window['List'].update(files)
         elif event == 'Clip Filenames':
             if files:
                 pyperclip.copy('\n'.join(files))
         elif event == 'Reset':
             files = get_extras(source)
-            window['LIST'].update(files)
+            window['List'].update(files)
         elif event == 'Remove':
             r = sg.popup_ok_cancel(f'Delete {len(files)} files from {source}?', title='Delete')
             if r == 'OK':
@@ -574,7 +577,6 @@ def extra_menu(parent):
                 print(f'Deleted {len(files)} files from {source}')
                 break
     window.close()
-
 
 def fix_playlist_menu(parent):
     source = options['source']
@@ -586,18 +588,20 @@ def fix_playlist_menu(parent):
 
     layout = [[sg.Text('Playlist', size=15),
                 sg.Combo(options['history'], default_value=source, size=(50,1),
-                        enable_events=True ,key='SOURCE', bind_return_key=True),
+                        enable_events=True ,key='Playlist', bind_return_key=True),
                 sg.FileBrowse(initial_folder=source, key="SBUT",
                     file_types=file_types)],
-            [sg.Text('Strip', size=15), sg.In(size=(51,1), key='STRIP')],
-            [sg.Text('Prefix', size=15), sg.In(size=(51,1), key='PREFIX')],
+            [sg.Text('Strip', size=15), sg.In(size=(51,1), key='Strip')],
+            [sg.Text('Prefix', size=15), sg.In(size=(51,1), key='Prefix')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=opts.get(box, False)) for box in boxes],
             [sg.Listbox(['Load a Playlist'], size=(100, 15), enable_events=True,
-                    key="LIST")],
+                    expand_x=True, expand_y=True, key="List")],
             [sg.Push(), sg.Button('Save', disabled=True),
                     sg.Button('Show', disabled=True), sg.Button('Close')] ]
-    window = sg.Window('Playlist Fixer', layout, modal=True, finalize=True)
+    window = sg.Window('Playlist Fixer', layout, modal=True,
+            resizable=True, finalize=True)
+    set_tooltips(window, 'Fix Playlist')
 
     while True:
         event, values = window.read()
@@ -607,9 +611,9 @@ def fix_playlist_menu(parent):
             opts = {box: values[box] for box in boxes}
             if playlist:
                 files, strip, prefix = scan_playlist(playlist, opts, window)
-        elif event == 'LIST':
+        elif event == 'List':
             item = values[event][0]
-        elif event == 'SOURCE':
+        elif event == 'Playlist':
             nsource = values[event]
             if os.path.isfile(nsource):
                 playlist = values[event]
@@ -618,24 +622,24 @@ def fix_playlist_menu(parent):
             elif os.path.isdir(nsource):
                 source = nsource
                 update_history(window, source)
-                window['LIST'].update(['Load a Playlist'])
+                window['List'].update(['Load a Playlist'])
                 window['Show'].update('Show', disabled=True)
                 window['SBUT'].InitialFolder = source
         elif event == 'Show':
             if window[event].get_text() == 'Show':
-                prefix = window['PREFIX'].get()
+                prefix = window['Prefix'].get()
                 window['Show'].update('Reset')
-                l = len(values['STRIP'])
+                l = len(values['Strip'])
                 outp = [prefix+f[l:] for f in files if f[0]!='#']
-                window['LIST'].update(outp)
+                window['List'].update(outp)
             else:
                 window['Show'].update('Show')
-                window['LIST'].update(files)
+                window['List'].update(files)
         elif event == 'Save':
-            p = os.path.split(window['SOURCE'].get())[0]
-            path = p if os.path.isdir(p) else options['dest']
-            prefix = window['PREFIX'].get()
-            l = len(values['STRIP'])
+            p = os.path.split(window['Playlist'].get())[0]
+            path = p if os.path.isdir(p) else options['Export Subfolder']
+            prefix = window['Prefix'].get()
+            l = len(values['Strip'])
             fn = sg.popup_get_file('Save Playlist', save_as=True,
                     default_path=path, default_extension='.m3u',
                     file_types=file_types)
@@ -648,28 +652,29 @@ def fix_playlist_menu(parent):
                         f = prefix+f[l:]
                     _print(f, file=outp)
     window.close()
-
 def filename_menu(parent):
     source = options['source']
     boxes = ['Ignore Folders']
     opts = {k :False for k in boxes}
     print('Checking Filenames')
     match = options['pattern']
-    wrong = None
+    wrong = compared = None
 
 
     layout = [[sg.Text('Source', size=15),
                 sg.Combo(options['history'], default_value=source,
-                        size=(50,1), key='SOURCE'),
+                        size=(50,1), key='Source'),
                 sg.FileBrowse(initial_folder=source, key="SBUT",)],
-            [sg.Text('Match', size=15), sg.In(match, size=(51,1), key='MATCH')],
+            [sg.Text('Match', size=15), sg.In(match, size=(51,1), key='Match')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=opts.get(box, False)) for box in boxes],
             [sg.Listbox(['Nothing Scanned'], size=(100, 15), enable_events=True,
-                    key="LIST")],
+                    key="List", expand_x=True, expand_y=True)],
             [sg.Button('Clip Filenames', disabled=True), sg.Push(),
                     sg.Button('Scan'), sg.Button('Compare'), sg.Button('Close')] ]
-    window = sg.Window('Verify Filenames', layout, modal=True, finalize=True)
+    window = sg.Window('Verify Filenames', layout, modal=True,
+            resizable=True, finalize=True)
+    set_tooltips(window, 'Verify Filenames')
 
     while True:
         event, values = window.read()
@@ -677,7 +682,7 @@ def filename_menu(parent):
             break
         elif event in boxes:
             opts = {box: values[box] for box in boxes}
-        elif event == 'LIST':
+        elif event == 'List':
             if not compared: continue
             item = values[event][0]
             expected = item.split(' || ')[1]
@@ -689,27 +694,27 @@ def filename_menu(parent):
             else:
                 wrong[i] = f'{seltags.filename} || {m}'
                 indexes[i] = seltags.filename
-            window['LIST'].update(wrong, scroll_to_index=i-2)
+            window['List'].update(wrong, scroll_to_index=i-2)
         elif event == 'Clip Filenames':
             pyperclip.copy('\n'.join(wrong))
         elif event == 'Scan':
-            source = values['SOURCE']
+            source = values['Source']
             files = get_files(source, quiet=True)[0]
             wrong = check_filenames(files)
-            window['LIST'].update(values=wrong)
+            window['List'].update(values=wrong)
             update_history(window, source)
             compared = False
             window['Clip Filenames'].update(disabled=False)
         elif event == 'Compare':
-            if os.path.isdir(values['SOURCE']):
-                source = values['SOURCE']
+            if os.path.isdir(values['Source']):
+                source = values['Source']
                 update_history(window, source)
             else:
-                window['SOURCE'].update(source)
+                window['Source'].update(source)
                 continue
-            match = options['pattern'] = values['MATCH']
+            match = options['pattern'] = values['Match']
             wrong, tags, indexes = get_unmatched_filenames(source, match, opts)
-            window['LIST'].update(wrong or ['Nothing Found'])
+            window['List'].update(wrong or ['Nothing Found'])
             window['Clip Filenames'].update(disabled=False)
             compared = True  
 
@@ -731,7 +736,7 @@ def edit_file(tags, dest, match='', multi=False):
         match = match if match and match.endswith('.mp3') else match + '.mp3'
     expected = get_match_str(tags, match)
     if match:
-        layout = [[sg.Text('Expected', size=size[0], key='MTEXT'), sg.Text(expected, key='MATCH')]]
+        layout = [[sg.Text('Expected', size=size[0], key='MTEXT'), sg.Text(expected, key='Match')]]
     else:
         layout = [[]]
 
@@ -766,7 +771,7 @@ def edit_file(tags, dest, match='', multi=False):
             tags.__setattr__(event.lower(), values[event])
             if match:
                 m = get_match_str(tags, match)
-                window['MATCH'].update(m)
+                window['Match'].update(m)
                 if m == tags.filename:
                     window['MTEXT'].update('Match')
                 else:
@@ -778,7 +783,7 @@ def edit_file(tags, dest, match='', multi=False):
 def tag_editor(parent):
     sort_column = 0; clicked=None
     source = options['source']
-    boxes = ('Case Sensitive', 'Option 2')
+    boxes = ('Case Sensitive', 'Play Songs')
     opts = {k: False for k in boxes}
     headings = ('Title', 'Artist', 'Album', 'Genre', 'Filename')
     hsizes = [20, 20, 20, 10, 30]
@@ -789,7 +794,7 @@ def tag_editor(parent):
             auto_size_columns=False,
             display_row_numbers=False,
             justification='left',
-            key='TABLE',
+            key='Table',
             enable_events=True,
             expand_x=True,
             expand_y=True,
@@ -797,57 +802,58 @@ def tag_editor(parent):
 
     layout = [[sg.Text('Source', size=12),
                 sg.Combo(options['history'], default_value=source, size=(50,1),
-                bind_return_key=True, key='SOURCE'),
+                bind_return_key=True, key='Source'),
                 sg.FolderBrowse(initial_folder=source, key="SBUT",), sg.Button('Scan')],
-            [sg.Text('Filter', size=12), sg.In(size=(51,1), key='FILTER'),
+            [sg.Text('Filter', size=12), sg.In(size=(51,1), key='Filter'),
                 sg.Combo(('Any',)+headings, default_value='Any', readonly=True,
-                        enable_events=True, key='FKEY'),
-                sg.Button('Includes'), sg.Button('Excludes'), sg.Button('Reset')],
+                        enable_events=True, key='Key'),
+                sg.Button('Include'), sg.Button('Exclude'), sg.Button('Reset')],
             [sg.Checkbox(box, key=box, enable_events=True,
                 default=opts.get(box, False)) for box in boxes],
             [table_layout],
             [sg.Button('Play Song'), sg.Push(), sg.Button('Multi Edit'),
                 sg.Button('Close')] ]
 
-    window = sg.Window('Verify Filenames', layout, modal=True,finalize=True,
-            return_keyboard_events=True)
-    window['SOURCE'].bind("<Return>", "_ENTER")
-    window['FILTER'].bind("<Return>", "_ENTER")
-    etable = window['TABLE']
-    scroller = get_scroller(window['TABLE'])
+    window = sg.Window('Tag Editor', layout, modal=True,finalize=True,
+            resizable=True, return_keyboard_events=True)
+    set_tooltips(window, 'Tag Editor')
+    window['Source'].bind("<Return>", "_ENTER")
+    window['Filter'].bind("<Return>", "_ENTER")
+    etable = window['Table']
+    scroller = get_scroller(window['Table'])
 
     while True:
         event, values = window.read()
         if event in (sg.WIN_CLOSED, 'Close'):
             break
-        elif event in ('Scan', 'Reset', 'SOURCE_ENTER'):
-            nsource = values['SOURCE']
+        elif event in ('Scan', 'Reset', 'Source_ENTER'):
+            nsource = values['Source']
             if os.path.isdir(nsource):
                 source = nsource
                 update_history(window, source)
                 table, tags = make_tag_table(source, event=='Reset')
                 sort_column = 0
-                window['TABLE'].update(table)
+                window['Table'].update(table)
             else:
-                window['SOURCE'].update(source)
-        elif event in ('Includes', 'FILTER_ENTER'):
-            table = filter_tag_table(values['FILTER'], table,
-                    window['FKEY'].get(), headings, opts)
-            window['FILTER'].update('')
-            window['TABLE'].update(table)
-        elif event == 'Excludes':
-            table = filter_tag_table(values['FILTER'], table,
-                    window['FKEY'].get(), headings, opts, True)
-            window['FILTER'].update('')
-            window['TABLE'].update(table)
+                window['Source'].update(source)
+        elif event in ('Include', 'Filter_ENTER'):
+            table = filter_tag_table(values['Filter'], table,
+                    window['Key'].get(), headings, opts)
+            window['Filter'].update('')
+            window['Table'].update(table)
+        elif event == 'Exclude':
+            table = filter_tag_table(values['Filter'], table,
+                    window['Key'].get(), headings, opts, True)
+            window['Filter'].update('')
+            window['Table'].update(table)
         elif event == 'Multi Edit':
-            selected = values["TABLE"]
+            selected = values['Table']
             if selected:
                 t = table[selected[0]][-1]
                 t = edit_file(tags[t], source, multi=True)
                 t.filename = ''
                 update_multi_tags(table, selected, tags, t, source)
-                window['TABLE'].update(table)
+                window['Table'].update(table)
 
         elif event == 'Play Song':
             if clicked != None:
@@ -857,26 +863,30 @@ def tag_editor(parent):
         elif event in boxes:
             opts[event] = values[event]
 
-        # HANDLE TABLE CLICKS
-        elif isinstance(event, tuple) and event[0] == 'TABLE':
-            selected = values['TABLE']
+        # HANDLE Table CLICKS
+        elif isinstance(event, tuple) and event[0] == 'Table':
+            selected = values['Table']
             clicked = event[2]
             if len(selected) == 1 and selected[0] == clicked[0]:
                 # DOUBLE CLICKED TO EDIT
-                row = table[clicked[0]]
-                fn = row[-1]
-                seltags = tags[fn]
-                edit_file(seltags, source)
-                table[clicked[0]] = seltags.as_row()
-                window['TABLE'].update(table)
+                if opts['Play Songs']:
+                    fn = os.path.join(source, table[clicked[0]][-1])
+                    subprocess.call(('xdg-open', fn))
+                else:
+                    row = table[clicked[0]]
+                    fn = row[-1]
+                    seltags = tags[fn]
+                    edit_file(seltags, source)
+                    table[clicked[0]] = seltags.as_row()
+                    window['Table'].update(table)
             elif clicked[0] == -1:
                 sort_column = clicked[1]
                 table = sort_table(table, sort_column)
-                window['TABLE'].update(table)
+                window['Table'].update(table)
             else:
                 pass
                 #print(f'Table clicked at {clicked}')
-        elif event == 'TABLE':
+        elif event == 'Table':
             pass
         elif event[1] == ':' and window.find_element_with_focus() == etable:
             scroller(event[0], table, sort_column)
@@ -898,7 +908,7 @@ def get_scroller(element):
             return
         c = key.lower()
         ti = time.perf_counter()
-        if ti - last_press < KEY_DELAY:
+        if ti - last_press < Key_DELAY:
             keys_pressed += c
         else:
             keys_pressed = c
@@ -915,7 +925,7 @@ def get_scroller(element):
         element.set_vscroll_position(perc)
         if isinstance(element, sg.Table):
             element.update(select_rows=[i])
-    KEY_DELAY = 1
+    Key_DELAY = 1
     keys_pressed = ''
     last_press = 0
     return scroll_to_index
@@ -985,7 +995,7 @@ def browser(path, types=None):
                 break
         items = folders+files
         if window != None:
-            window['LIST'].update(items)
+            window['List'].update(items)
             window['PARENTS'].update(parents[0] or '/', values=parents[1:])
         return items, parents
 
@@ -994,7 +1004,7 @@ def browser(path, types=None):
                     default_value=parents[0], key='PARENTS',
                     enable_events=True, bind_return_key=True),
                 sg.Push(), sg.Button('^', key='UP')],
-            [sg.Listbox(items, size = (PATH_LENGTH+5, BOX_HEIGHT), key='LIST', enable_events=True)],
+            [sg.Listbox(items, size = (PATH_LENGTH+5, BOX_HEIGHT), key='List', enable_events=True)],
             [sg.Push(), sg.Button('Cancel'), sg.Button('Okay')]]
     window = sg.Window('File Chooser', layout, modal=True)
     while True:
@@ -1015,7 +1025,7 @@ def browser(path, types=None):
             else:
                 path = path
             items, parents = get_listing(path, window)
-        elif event == 'LIST':
+        elif event == 'List':
             clicked = values[event][0]
             if clicked.startswith('/'):
                 p = os.path.join(path, values[event][0][1:])
@@ -1068,6 +1078,7 @@ def load_options(path=None):
             dest = os.path.join(user, 'output'),
             font = ('Arial', 14),
             pattern = '{genre}/{artist} - {title}',
+            tooltips = True,
             history = [source])
         print('Failed to load options: setting default')
     print(f'  {options}')
@@ -1123,8 +1134,8 @@ def update_history(window, source=None, dest=None):
         history.insert(0, source)
         history = history[:MAX_HISTORY]
         options['source'] = source
-        e = window.Find('SOURCE', True)
-        if e: window['SOURCE'].update(source, history)
+        e = window.Find('Source', True)
+        if e: window['Source'].update(source, history)
     if dest:
         dest = os.path.normpath(dest)
         if dest in history:
@@ -1132,8 +1143,8 @@ def update_history(window, source=None, dest=None):
         history.insert(0, dest)
         history = history[:MAX_HISTORY]
         options['dest'] = dest
-        e = window.Find('DEST', True)
-        if e: window['DEST'].update(dest, history)
+        e = window.Find('Dest', True)
+        if e: window['Dest'].update(dest, history)
 
 ## M P 3  F U N C T I O N S
 
@@ -1672,7 +1683,7 @@ def remove_extras(files, clicked, opts, window):
                 sel = i
                 files.remove(f)
         sel = len(files) - sel
-    elif opts['Filter Same Exts']:
+    elif opts['Filter Same Extentions']:
         ext = os.path.splitext(clicked)[1]
         for i, f in enumerate(reversed(files)):
             if os.path.splitext(f)[1] == ext:
@@ -1681,7 +1692,7 @@ def remove_extras(files, clicked, opts, window):
         sel = len(files) - sel
     elif clicked in files:
         files.remove(clicked)
-    window['LIST'].update(values=files or ['Nothing found'],
+    window['List'].update(values=files or ['Nothing found'],
             scroll_to_index=max(sel-2, 0))
 
 
@@ -1706,9 +1717,9 @@ def scan_playlist(source, opts, window):
 
     strip = os.path.commonpath(files) + os.sep
     prefix = '../'
-    window['LIST'].update(lines)
-    window['STRIP'].update(strip)
-    window['PREFIX'].update(prefix)
+    window['List'].update(lines)
+    window['Strip'].update(strip)
+    window['Prefix'].update(prefix)
     window['Save'].update(disabled=False)
     window['Show'].update(disabled=False)
     return lines, strip, prefix
@@ -1735,10 +1746,50 @@ def tags_from_fn(match, text, tags, window):
             tags.__setattr__(k, v)
             window[k[0].upper()+k[1:]].update(v)
 
+def load_tooltips(filename):
+    try:
+        with open(filename) as f:
+            data = f.readlines()
+    except:
+        return {}
+    tools = {'main': {}}
+    tool = ''
+
+    for l in data:
+        l=l.strip()
+
+        if l.startswith('## '):
+            tool = l[3:].strip()
+            tools[tool] = {}
+        elif l.startswith('- '):
+            try:
+                item, value = l[2:].split(' - ')
+                tools[tool][item] = value
+            except:
+                continue
+        elif l.startswith('**') and not tool:
+            try:
+                k, v = l.split(' - ')
+                tools['main'][k.strip('*')] = v
+            except:
+                continue
+    return tools
+    
+def set_tooltips(window, name):
+    found=[]; missed=[]
+    if options['tooltips']:
+        tips = tooltips[name]
+        for e in window.key_dict:
+            if e in tooltips[name]:
+                window[e].set_tooltip(tips[e])
+                found.append(e)
+            else:
+                missed.append(e)
+
 def print_dict(d, info='dictionary'):
-    _print('\n', info)
+    _print(f'\n{info}')
     for i in d:
-        _print(i, d[i])
+        _print(f'{i}: {d[i]}')
 
 if __name__ == '__main__':
     main()
