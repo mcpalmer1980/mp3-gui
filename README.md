@@ -113,6 +113,7 @@ Display all artists in source folder, edit artist tags, and export artist playli
 - Extra Details - Display ablums from each artist
 - Unfold Details - Display each album on its own line of text 
 - Minimum Count - Only artists with at least this number of songs will be shown
+- Play on Click - Play songs by an artist when you click instead of editing
 
 ## Albums  
 Display all albums in source folder, edit album tags, and export album playlists
@@ -158,7 +159,7 @@ Show, filter, and edit the tags for all MP3s in source folder
 - Exclude - Filter songs that do not include the given filter text
 - Reset - Reset all filters and display the entire song list
 - Table - Click on a selected song to edit its tags (double click)
-- Play Song - Play the currently selected song in your default MP3 player
+- Play Song - Play the currently selected song(s) in your default MP3 player
 - Multi Edit - Edit tags for multiple selected files at once
 
 ### Options

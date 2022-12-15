@@ -426,7 +426,7 @@ def category_menu(window, mode='Artists'):
 
     source = options['source']
     modes = ['Artists', 'Albums', 'Genres']
-    boxes = ['Sort by Count', 'Extra Details', 'Unfold Details']
+    boxes = ['Sort by Count', 'Extra Details', 'Unfold Details', 'Play on Click']
     checked = {'Sort by Count':False, 'Extra Details': True}
     opts = [checked.get(k, False) for k in boxes]
     title, list_items, min_count = set_mode(mode)
@@ -450,7 +450,7 @@ def category_menu(window, mode='Artists'):
     
     window = sg.Window(title, layout, modal=True, finalize=True, resizable=True)
     set_tooltips(window, mode)
-    items, indexes, songs = list_items(source, min_count, rescan=False, *opts)
+    items, indexes, songs = list_items(source, min_count, rescan=False, *opts[:-1])
     window['List'].update(items)
     while True:
         event, values = window.read()
@@ -473,26 +473,26 @@ def category_menu(window, mode='Artists'):
             elif event=='Extra Details' and not values.get('Extra Details', False):
                 window['Unfold Details'].update(False)
             opts = [values.get(k, False) for k in boxes]
-            items, indexes, songs = list_items(source, min_count, *opts)
+            items, indexes, songs = list_items(source, min_count, *opts[:-1])
             window['List'].update(values=items)
         elif event == 'Minimum Count':
             try:
                 min_count = int(values['Minimum Count'])
             except:
                 continue
-            items, indexes, songs = list_items(source, min_count, *opts)
+            items, indexes, songs = list_items(source, min_count, *opts[:-1])
             window['List'].update(values=items)
         elif event == 'Source':
             nsource = values['Source']
             if comp_dir(source, nsource, True):
                 source = nsource
                 update_history(window, source)
-                items, indexes, songs = list_items(source, min_count, *opts)
+                items, indexes, songs = list_items(source, min_count, *opts[:-1])
                 window['List'].update(values=items)
         elif event == 'MODE':
             new_mode = values['MODE']
             title, list_items, min_count = set_mode(new_mode)
-            items, indexes, songs = list_items(source, min_count, *opts)
+            items, indexes, songs = list_items(source, min_count, *opts[:-1])
             window['List'].update(items)
             window['Minimum Count'].update(min_count)
             old = window['Export Subfolder'].get()
@@ -503,6 +503,13 @@ def category_menu(window, mode='Artists'):
         elif event == 'List':
             selected = window['List'].GetIndexes()[0]
             key = indexes[selected]
+
+            # P L A Y  O N  C L I C K  I S  S E L E C T E D
+            if opts[-1]: 
+                l = [os.path.join(source, s.filename) for s in songs[key]]
+                play_songs(l)
+                continue
+
             if indexes[selected]:
                 value = sg.popup_get_text('', title='Change Value', default_text=key)
                 if value and value != key:
@@ -856,7 +863,10 @@ def tag_editor(parent):
                 window['Table'].update(table)
 
         elif event == 'Play Song':
-            if clicked != None:
+            selected = values['Table']
+            if len(selected) > 1:
+                play_songs([os.path.join(source,table[row][-1]) for row in selected])
+            elif clicked != None:
                 fn = os.path.join(source, table[clicked[0]][-1])
                 subprocess.call(('xdg-open', fn))
             
@@ -1673,6 +1683,24 @@ def pick_files(results, opts):
     if opts['Extra']:
         which += extra
     return which
+
+def play_songs(songs):
+    if not hasattr(play_songs, 'player'):
+        try:
+            r = subprocess.run(('xdg-mime', 'query', 'default', 'audio/mpeg'),
+                    capture_output=True).stdout.decode()
+            play_songs.player = r.split('.')[0]
+        except:
+            play_songs.player = None
+    try:
+        [s for s in songs]
+    except:
+        songs = [songs]
+
+    if play_songs.player:
+        subprocess.Popen([play_songs.player] + songs,
+            stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    
 
 def remove_extras(files, clicked, opts, window):
     sel = files.index(clicked)
