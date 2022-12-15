@@ -8,7 +8,7 @@ category menu update tags?
 Fix Playlist - Remove Clicked
 
 '''
-import os, sys, pickle, time, pyperclip, zlib, subprocess
+import os, sys, pickle, time, pyperclip, zlib, subprocess, random
 import PySimpleGUI as sg
 from mutagen.easyid3 import EasyID3 as ID3
 from shutil import copy
@@ -507,7 +507,7 @@ def category_menu(window, mode='Artists'):
             # P L A Y  O N  C L I C K  I S  S E L E C T E D
             if opts[-1]: 
                 l = [os.path.join(source, s.filename) for s in songs[key]]
-                play_songs(l)
+                play_songs(l, True)
                 continue
 
             if indexes[selected]:
@@ -530,7 +530,7 @@ def extra_menu(parent):
         return sorted(extras, key=lambda x:x.lower())
 
     source = options['source']
-    boxes = ['Filter Same Folder', 'Filter Same Extentions']
+    boxes = ['Filter Same Folder', 'Filter Same Extensions']
     opts = {k :False for k in boxes}
     print('Showing non-MP3 files')
 
@@ -1684,7 +1684,7 @@ def pick_files(results, opts):
         which += extra
     return which
 
-def play_songs(songs):
+def play_songs(songs, shuffle=False):
     if not hasattr(play_songs, 'player'):
         try:
             r = subprocess.run(('xdg-mime', 'query', 'default', 'audio/mpeg'),
@@ -1696,7 +1696,8 @@ def play_songs(songs):
         [s for s in songs]
     except:
         songs = [songs]
-
+    if shuffle:
+        random.shuffle(songs)
     if play_songs.player:
         subprocess.Popen([play_songs.player] + songs,
             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -1711,7 +1712,7 @@ def remove_extras(files, clicked, opts, window):
                 sel = i
                 files.remove(f)
         sel = len(files) - sel
-    elif opts['Filter Same Extentions']:
+    elif opts['Filter Same Extensions']:
         ext = os.path.splitext(clicked)[1]
         for i, f in enumerate(reversed(files)):
             if os.path.splitext(f)[1] == ext:

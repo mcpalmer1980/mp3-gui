@@ -22,8 +22,8 @@ Copy MP3s files missing from the source folder to the chosen destination
 ### Functions:  
 - Source - Select, type, or browse for a source folder from the history dropdown
 - Dest - Select, type, or browse for a destination folder from the history dropdown
-- Swap - Quickly swap the source and destinatation folders
-- Scan - Compare the source and desintation folders and display the results
+- Swap - Quickly swap the source and destination folders
+- Scan - Compare the source and destination folders and display the results
 - Copy - Copy the files displayed in the result window to the destination folder
 
 ### Options:
@@ -40,7 +40,7 @@ Remove any files from the destination folder that are missing in source folder
 ### Functions:  
 - Source - Select, type, or browse for a source folder from the history dropdown
 - Dest - Select, type, or browse for a destination folder from the history dropdown
-- Swap - Quickly swap the source and destinatation folders
+- Swap - Quickly swap the source and destination folders
 - List - Click listed files to remove them from the list (so not to delete them)
 - Remove - Remove files from destination folder that are missing in the source
 
@@ -62,7 +62,7 @@ Compare filenames to MP3 tags and detect mangled filenames
 - Ignore Folders - Compare filenames only, ignoring any subfolders
 
 ### Match Strings:
-Match strings can include any text seperating the {title}, {artist}, {album}, or {genre} tags.  
+Match strings can include any text separating the {title}, {artist}, {album}, or {genre} tags.  
   
 Here are a few examples:  
 **{artist} - {title}** - "Michael Jackson - Beat It.mp3"  
@@ -79,14 +79,14 @@ Show or delete non-MP3 files in source folder
 
 ### Options:
 - Filter Same Folder - Filter all files from the same folder when you click one
-- Filter Same Extentions - Filter all files with same extension when you click one
+- Filter Same Extensions - Filter all files with same extension when you click one
 
 ## Fix Playlist
 Normalize playlist to use relative paths and remove extra lines
 
 ### Functions
 - Playlist - Type or browse for a playlist to edit
-- Strip - The string to strip from the begining of the filenames
+- Strip - The string to strip from the beginning of the filenames
 - Prefix - Prefix to add to the beginning of the filenames
 - List - Click files to remove them from the playlist
 - Show - Show the converted output instead of the original filename
@@ -94,7 +94,7 @@ Normalize playlist to use relative paths and remove extra lines
 - Save - Save the playlist with the new converted output
 
 ### Options
-- Remove Metadata - Remove descriptive lines (begining with #) from the playlist
+- Remove Metadata - Remove descriptive lines (beginning with #) from the playlist
 - Remove Missing - Remove invalid entries that link to missing files 
 - Remove Clicked - Remove entries when you click them in the listbox
 
@@ -110,7 +110,7 @@ Display all artists in source folder, edit artist tags, and export artist playli
 
 ### Options
 - Sort by Count - Sort artists by song count instead of alphabetically
-- Extra Details - Display ablums from each artist
+- Extra Details - Display albums from each artist
 - Unfold Details - Display each album on its own line of text 
 - Minimum Count - Only artists with at least this number of songs will be shown
 - Play on Click - Play songs by an artist when you click instead of editing
@@ -123,13 +123,14 @@ Display all albums in source folder, edit album tags, and export album playlists
 - Export Subfolder - Enter name for subfolder to export playlists into
 - List - Click a listed album to edit the album tag for each song on it
 - Copy - Copy displayed album list into the clipboard
-- Make Playlists - Export playlist for each ablum currently displayed
+- Make Playlists - Export playlist for each abloom currently displayed
 
 ### Options
-- Sort by Count - Sort ablums by song count instead of alphabetically
+- Sort by Count - Sort albums by song count instead of alphabetically
 - Extra Details - Display songs from each album
 - Unfold Details - Display each song on its own line of text 
-- Minimum Count - Only ablums with at least this number of songs will be shown
+- Minimum Count - Only albums with at least this number of songs will be shown
+- Play on Click - Play songs by from an album when you click instead of editing
 
 ## Genres
 Display all genres in source folder, edit genre tags, and export genre playlists
@@ -146,6 +147,7 @@ Display all genres in source folder, edit genre tags, and export genre playlists
 - Extra Details - Display artists in each genre
 - Unfold Details - Display each artist on its own line of text 
 - Minimum Count - Only genres with at least this number of songs will be shown
+- Play on Click - Play songs in an genre when you click instead of editing
 
 ## Tag Editor  
 Show, filter, and edit the tags for all MP3s in source folder
